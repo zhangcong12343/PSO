@@ -1,0 +1,75 @@
+%\newcommand{\path}{./PaperEngine}
+\newcommand{\path}{/Users/chenyu/Documents/Research/PaperEngine}
+\documentclass[a4paper,10pt]{article}
+
+\input{\path/paper/mypapersetting}
+
+\usepackage{enumerate}
+\usepackage{enumitem}
+\usepackage{setspace}
+\usepackage{framed}
+\usepackage{amsthm,amsmath,amssymb}
+\usepackage{mathrsfs}
+\usepackage{graphicx}
+\usepackage{float}
+
+\newcommand{\FuncOT}{\mathcal{F}_\mathsf{ot}}
+\newcommand{\FuncPSU}{\mathcal{F}_\mathsf{psu}}
+\newcommand{\FuncPSI}{\mathcal{F}_\mathsf{psi}}
+
+\newcommand{\SimR}{\mathsf{Sim}_\mathcal{R}}
+\newcommand{\SimS}{\mathsf{Sim}_\mathcal{S}}
+
+\begin{document}
+
+\thispagestyle{empty}
+
+\title{Optimal PSO from Commutative Weak Pseudorandom Functions}
+
+% \author{
+%   Min Zhang
+%   \thanks{State Key Laboratory of Information Security, Institute of Information Engineering, Chinese Academy of Sciences. School of Cyber Security, University of Chinese Academy of Sciences. Email: \blue{\texttt{zm000min@163.com}}}
+%   \and
+%   Yu Chen
+%   \thanks{School of Cyber Science and Technology, Shandong University, Qingdao 266237, China. Email: \blue{\texttt{yuchen.prc@gmail.com}}}
+% }
+
+\date{}
+
+\maketitle
+
+\begin{abstract}
+XXX
+  
+           
+\begin{trivlist}
+\item \textbf{Keywords:} XXX
+\end{trivlist}
+\end{abstract}
+
+\thispagestyle{empty}
+
+\newpage
+\setcounter{tocdepth}{2}
+\tableofcontents
+\newpage
+
+\pagestyle{plain}
+\pagenumbering{arabic}
+\setcounter{page}{1}
+	
+		
+% \input{1-Introduction}
+\input{2-Preliminaries}
+\input{3-Protocols}
+
+\bibliographystyle{alpha}
+\bibliography{\path/bib/mycrypto,reference}
+
+
+\newpage
+
+\appendix
+\input{appendix}	
+	
+\end{document}

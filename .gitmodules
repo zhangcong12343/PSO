@@ -1,0 +1,3 @@
+[submodule "PaperEngine"]
+	path = PaperEngine
+	url = https://github.com/yuchen1024/PaperEngine.git
