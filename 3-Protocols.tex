@@ -460,3 +460,155 @@ If $(g, g^\alpha, g^\beta, g^\gamma)$ is a DDH tuple, then the simulation is ide
 else it is identical to hybrid 2. 
 \end{trivlist}
 \end{proof}
+
+
+
+
+
+\section{Commutative Function}\label{sec:cf}
+A commutative function (CF) scheme is a tuple of five algorithms $(\mathsf{Setup},\mathsf{F}^1,\mathsf{F}^2,\mathsf{S},\mathsf{E})$:
+\begin{itemize}
+\item $\mathsf{Setup}(1^\kappa)$: on input the security parameter $\kappa$ outputs public parameters $pp$. 
+
+\item $\mathsf{F}^1(pp,s)$: on input public parameter $pp$ and a secret $s\in S$, outputs a half-key $p\in P$.
+
+\item $\mathsf{F}^2(p, s)$: on input a half-key $p$ and a secret $s \in S$, outputs a noisy-key $w \in P$.
+
+\item $\mathsf{S}(w)$: on input a noisy-key $w$, outputs a signal $\sigma \in \Sigma$. 
+
+\item $\mathsf{E}(w,\sigma)$: on input a noisy-key $w$ and a signal $\sigma$, outputs a key $k \in K$. 
+\end{itemize}
+where $(\mathsf{Setup},\mathsf{F}^1,\mathsf{F}^2)$ are probabilistic algorithm, and $(\mathsf{S},\mathsf{E})$ are deterministic algorithm.
+
+\begin{trivlist}
+\item \textbf{Correctness.} For any $pp \leftarrow \mathsf{Setup}(1^\kappa)$, 
+    any $s_1,s_2\leftarrow S$, $p_1 \leftarrow \mathsf{F}^1(pp,s_1)$, $p_2 \leftarrow \mathsf{F}^1(pp,s_2)$, any $w_1 \leftarrow \mathsf{F}^2(p_2,s_1)$, $w_2 \leftarrow \mathsf{F}^2(p_1,s_2)$, any $i\in \{0,1\}, \sigma_i \leftarrow \mathsf{S}(w_i)$, 
+    it holds that $k_1=\mathsf{E}(w_1,\sigma_i ) = \mathsf{E}(w_2,\sigma_i)=k_2$ with overwhilming probability. 
+\end{trivlist}
+
+\subsection{Key Exchange from Commutative Functions}
+As shown in Figure \ref{fig:ke-from-commutative-functions}.
+\begin{figure}[!hbtp]
+\begin{framed}
+\begin{minipage}[center]{\textwidth}
+\begin{trivlist}
+\item \textbf{Parameters:} 
+\begin{itemize}
+    \item Common input: A CF scheme $(\mathsf{Setup},\mathsf{F}^1,\mathsf{F}^2,\mathsf{S},\mathsf{E})$, public parameter $pp\leftarrow \mathsf{Setup}(1^\kappa)$. 
+\end{itemize}
+
+\item \textbf{Protocol:}
+
+\begin{enumerate}
+\item $\mathcal{R}$ picks $s_2 \sample S$, and computes $p_2:\leftarrow \mathsf{F}^1(pp,s_2)$, 
+    then sends $p_2$ to $\mathcal{S}$. 
+
+\item $\mathcal{S}$ picks $s_1 \sample S$, and computes $p_1:\leftarrow \mathsf{F}^1(pp,s_1)$, 
+    then sends $p_1$ to $\mathcal{S}$. 
+
+\item $\mathcal{R}$ computes $w_2\leftarrow \mathsf{F}^2(p_1,s_2)$ and $\sigma:= \mathsf{S}(w_2)$, 
+    then sends $\sigma$ to $\mathcal{S}$. 
+
+\item $\mathcal{S}$ computes $w_1\leftarrow \mathsf{F}^2(p_2,s_1)$. 
+
+\item $\mathcal{R}$ computes $k:=\mathsf{E}(w_2,\sigma)$ and $\mathcal{S}$ computes $k:=\mathcal{E}(w_1,\sigma)$.  
+\end{enumerate}
+\end{trivlist}
+\end{minipage}
+\end{framed}
+\caption{Key Exchange from Commutative Functions}\label{fig:ke-from-commutative-functions}
+\end{figure} 
+	
+\subsection{Instantiation of CF}
+
+\subsubsection{DDH}
+\begin{itemize}
+\item $\mathsf{Setup}(1^\kappa)$: on input $1^\kappa$, output a description of a cyclic group $\mathbb{G}$, its order $q$, and a generator $g$, let $pp=(\mathbb{G},q,g)$.
+
+\item $\mathsf{F}^1(pp,s)$: on input public parameter $pp=(\mathbb{G},q,g)$ and a secret $s\in \mathbb{Z}_q$, outputs a half-key $p:= g^s \in \mathbb{G}$.
+
+\item $\mathsf{F}^2(p, s)$: on input a half-key $p$ and a secret $s \in \mathbb{Z}_q$, outputs a noisy-key $p^s \in \mathbb{G}$.
+
+\item $\mathsf{S}(w)$: on input a noisy-key $w\in \mathbb{G}$, outputs a signal $\sigma :=\perp$. 
+
+\item $\mathsf{E}(w,\sigma)$: on input a noisy-key $w\in \mathbb{G}$ and a signal $\sigma=\perp$, outputs a key $k:=w \in \mathbb{G}$. 
+\end{itemize}
+
+
+\subsubsection{DXL12}
+\begin{itemize}
+\item $\mathsf{Setup}(1^\kappa)$: on input $1^\kappa$, output $pp=(q,n,\alpha, M)$ where $(q,n,\alpha)$ are public parameter in lattice and $M\in \mathbb{Z}_q^{n\times n}$ is a random matrix. 
+
+\item $\mathsf{F}^1(pp,s)$: on input public parameter $pp=(q,n,\alpha,M)$ and a secret $s\leftarrow \mathcal{D}_{\mathbb{Z}^n,\alpha q} $, selects a noise $e\leftarrow \mathcal{D}_{\mathbb{Z}^n,\alpha q}$, outputs a half-key $p:= Ms +2e \in \mathbb{Z}_q^n$.
+
+\item $\mathsf{F}^2(p, s)$: on input a half-key $p$ and a secret $s\leftarrow \mathcal{D}_{\mathbb{Z}^n,\alpha q} $, selects a noise $e\leftarrow \mathcal{D}_{\mathbb{Z},\alpha q}$, outputs a noisy-key $w:= ps+2e \in \mathbb{Z}_q$.
+
+\item $\mathsf{S}(w)$: on input a noisy-key $w$, run $S$ algorithm of robust extractors in DXL12 and outputs $\sigma \in \{0,1\}$. 
+
+\item $\mathsf{E}(w,\sigma)$: on input a noisy-key $w$ and a signal $\sigma$, run $E$ algorithm of robust extractors in DXL12 and outputs $k \in \{0,1\}$. 
+\end{itemize}
+	
+
+\subsubsection{Pei14}
+\begin{itemize}
+\item $\mathsf{Setup}(1^\kappa)$: on input $1^\kappa$, output $pp=(a, g)$, where $a\in R_q$ and $g\in R$ as description in Pei14.
+
+\item $\mathsf{F}^1(pp,s)$: on input public parameter $pp=(a,g)$ and a secret $s\leftarrow \chi $, selects a noise $e\leftarrow \chi$, outputs a half-key $p:= as +e \in R_q$.
+
+\item $\mathsf{F}^2(p, s)$: on input a half-key $p\in R_q$ and a secret $s\in R$, selects a noise $e\leftarrow \chi$, outputs a noisy-key $w:= gps+e \in R_q$.
+
+\item $\mathsf{S}(w)$: on input a noisy-key $w$, let $\sigma:=\langle \bar{v}\rangle_2\in R_2$, where $\bar{v}=dbl(v)$ as defined in Pei14.
+
+\item $\mathsf{E}(w,\sigma)$: on input a noisy-key $w$ and a signal $\sigma$, run $rec$ algorithm of Pei14 and outputs $k:= rec(w,\sigma) \in R_2$. 
+\end{itemize}	
+
+
+
+\subsection{PSU from CF}\label{sec:psu-from-cf}
+We construct a linear complexity PSU protocol from the CF in Figure~\ref{fig:CF-PSU}.  
+\begin{figure}[!hbtp]
+\begin{framed}
+\begin{minipage}[center]{\textwidth}
+\begin{trivlist}
+\item \textbf{Parameters:} 
+\begin{itemize}
+    \item Common input: A CF scheme $(\mathsf{Setup},\mathsf{F}^1,\mathsf{F}^2,\mathsf{S},\mathsf{E})$, public parameter $pp\leftarrow \mathsf{Setup}(1^\kappa)$.
+
+    \item Input of sender $\mathcal{S}$: $X = \{x_1, \dots, x_n\}$.
+
+    \item Input of receiver $\mathcal{R}$: $Y = \{y_1, \dots, y_n\}$. 
+\end{itemize}
+
+\item \textbf{Protocol:}
+
+\begin{enumerate}
+\item $\mathcal{R}$ picks $b \sample S$, then sends $(\mathsf{F}^1(\mathsf{H}(y_1),b), \dots, \mathsf{F}^1(\mathsf{H}(y_n),b))$ to $\mathcal{S}$. 
+
+\item $\mathcal{S}$ picks $a \sample S$, 
+    sends $(\mathsf{F}^1(\mathsf{H}(x_1),a), \dots, \mathsf{F}^1(\mathsf{H}(x_n),a))$ to $\mathcal{R}$; 
+    he also computes $(w_1,\dots,w_n):= (\mathsf{F}^2(\mathsf{F}^1(\mathsf{H}(y_1),b),a), \dots, \mathsf{F}^2(\mathsf{F}^1(\mathsf{H}(y_n),b),a))$, $\sigma_i:=\mathsf{S}(w_i)$ and $\Gamma:= \{k_i| k_i:=\mathsf{E}(w_i,\sigma_i),i\in [n]\}$. Then, he sends its permutation $\Gamma$ to $\mathcal{R}$. 
+
+
+\item $\mathcal{R}$ computes $(w_1',\dots,w_n'):= (\mathsf{F}^2(\mathsf{F}^1(\mathsf{H}(x_1),a),b), \dots,\mathsf{F}^2(\mathsf{F}^1(\mathsf{H}(x_n),a),b))$, $\sigma_i':=\mathsf{S}(w_i')$, and computes $k_i':=\mathsf{E}(w_i',\sigma_i'), i\in [n]$. 
+    then sets $v_i = 0$ iff $k_i'$ is not in $\Gamma$. 
+
+\item $\mathcal{R}$ with select vector $(v_1, \dots, v_n)$ and $\mathcal{S}$ with input $\{(x_i, \bot)\}_{i \in [n]}$ 
+    engage in one-sided OT. 
+
+\item $\mathcal{R}$ obtains $X - X \cap Y$, and thus obtains the union $X \cup Y$.  
+\end{enumerate}
+\end{trivlist}
+\end{minipage}
+\end{framed}
+\caption{CF-PSU}\label{fig:CF-PSU}
+\end{figure}
+
+
+
+
+
+
+
+
+
+
