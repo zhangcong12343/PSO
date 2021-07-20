@@ -1,0 +1,9 @@
+.DS_Store
+*.aux
+*.log
+*.bbl
+*.blg
+*.out
+*.toc
+*.gz
+*.fdb_latexmk

@@ -1,0 +1,398 @@
+\section{PSU from Commutative Weak PRFs}
+\begin{figure}[!hbtp]
+\begin{framed}
+\begin{minipage}[center]{\textwidth}
+\begin{trivlist}
+\item \textbf{Parameters:} 
+\begin{itemize}
+    \item Common input: $F: K \times D \rightarrow D$, hash function $\mathsf{H}: \{0,1\}^* \rightarrow D$. 
+
+    \item Input of sender $\mathcal{S}$: $X = \{x_1, \dots, x_n\}$.
+
+    \item Input of receiver $\mathcal{R}$: $Y = \{y_1, \dots, y_n\}$. 
+\end{itemize}
+
+\item \textbf{Protocol:}
+
+\begin{enumerate}
+\item $\mathcal{R}$ picks $k_2 \sample K$, 
+    then sends $\{F_{k_2}(\mathsf{H}(y_1)), \dots, F_{k_2}(\mathsf{H}(y_n))\}$ to $\mathcal{S}$. 
+
+\item $\mathcal{S}$ picks $k_1 \sample K$, 
+    computes and sends $\{F_{k_1}(\mathsf{H}(x_1)), \dots, F_{k_1}(\mathsf{H}(x_n))\}$ to $\mathcal{R}$; 
+    then computes $\{F_{k_1}(F_{k_2}(\mathsf{H}(y_1)), \dots, F_{k_1}(F_{k_2}(\mathsf{H}(y_n))\}$, 
+    sends its permutation $\Gamma$ to $\mathcal{R}$; 
+
+\item $\mathcal{R}$ computes $\{F_{k_2}(F_{k_1}(\mathsf{H}(x_1)), \dots, F_{k_2}(F_{k_1}(\mathsf{H}(x_n))\}$, 
+    then sets $v_i = 0$ iff the value is not in $\Gamma$. 
+
+\item $\mathcal{R}$ with select vector $(v_1, \dots, v_n)$ and $\mathcal{S}$ 
+    with input $\{(x_i, \bot)\}_{i \in [n]}$ engage in one-sided OT. 
+
+\item $\mathcal{R}$ obtains $X - X \cap Y$, and thus obtains the union $X \cup Y$.  
+\end{enumerate}
+\end{trivlist}
+\end{minipage}
+\end{framed}
+\caption{PSU from Commutative weak PRFs}\label{fig:PSU-from-commutative-functions}
+\end{figure} 
+
+\begin{trivlist}
+\item \textbf{Correctness.} The above protocol is correct except the case $E$ that 
+    $F_{k_1}(F_{k_2}(\mathsf{H}(x))) = F_{k_1}(F_{k_2}(\mathsf{H}(y)))$ for some $x \neq y$ occurs. 
+    We further divide $E$ to $E_0$ and $E_1$. 
+    $E_0$ denotes the case that $\mathsf{H}(x) = \mathsf{H}(y)$. 
+    $E_1$ denotes the case that $\mathsf{H}(x) \neq \mathsf{H}(y)$ 
+    but $F_{k_1}(F_{k_2}(\mathsf{H}(x))) = F_{k_1}(F_{k_2}(\mathsf{H}(y)))$, 
+    which can further be divided into sub-cases $E_{10}$ — $F_{k_2}(\mathsf{H}(x)) = F_{k_2}(\mathsf{H}(y))$ 
+    and $E_{11}$ — $F_{k_2}(\mathsf{H}(x)) \neq F_{k_2}(\mathsf{H}(y))$ but 
+    $F_{k_1}(F_{k_2}(\mathsf{H}(x))) = F_{k_1}(F_{k_2}(\mathsf{H}(y)))$. 
+    By the collision resistance of $\mathsf{H}$, we have $\Pr[E_0] = 2^{-\sigma}$. 
+    By the weak pseudorandomness of $F$, we have $\Pr[E_{10}] = \Pr[E_{11}] = 2^{-\ell}$. 
+    Therefore, we have $\Pr[E] \leq \Pr[E_0] + \Pr[E_{10}] + \Pr[E_{11}] = 2^{-\sigma}+2^{-\ell+1}$. 
+
+\end{trivlist} 
+
+\begin{theorem}
+The above PSU protocol is secure in the semi-honest model assuming $\mathsf{H}$ is a random oracle 
+and $F$ is a family of commutative weak PRFs.
+\end{theorem}
+
+\begin{proof}
+We exhibit simulators $\SimR$ and $\SimS$ for simulating corrupt $\mathcal{R}$ and $\mathcal{S}$ respectively, 
+and argue the indistinguishability of the produced transcript from the real execution. Let $|X \cap Y| = m$. 
+
+\begin{trivlist}
+\item \underline{Corrupt sender:} $\SimS$ simulates the view of corrupt $\mathcal{S}$, 
+    which consists of $\mathcal{S}$'s randomness, input, output and received messages.
+ 
+    We argue the output of $\SimS$ is indistinguishable from the real execution. 
+    For this, we formally show the simulation by proceeding the sequence of hybrid transcripts, 
+    where $T_0$ is the real view of $\mathcal{S}$, and $T_2$ is the output of $\SimS$. 
+
+\item $\text{Hybrid}_0$: $\SimS$ simulates with the knowledge of $Y$. 
+\begin{itemize}
+    \item $\SimS$ chooses the randomness for $\mathcal{R}$, i.e., picks $k_2 \sample K$.
+    
+    \item RO queries: for random oracle query $\langle z \rangle$, 
+        picks $h \sample D$ and set $\mathsf{H}(z):=h$. 
+
+    \item Let $h_i = \mathsf{H}(y_i)$ for each $y_i \in Y$. $\SimS$ outputs $(F_{k_2}(h_1), \dots, F_{k_2}(h_n))$.     
+\end{itemize}
+Clearly, $\SimS$'s simulation is identical to the real view. 
+
+\begin{center}
+\begin{tikzpicture}
+\node[textnode, name = intersection] {$X \cap Y$}; 
+\node[ellipsenode, name = X, left of =intersection, xshift=-1.5em, 
+    minimum height = 3em, minimum width=6em, label={[xshift=-1em]$X$}] {};
+\node[ellipsenode, name = Y, left of =intersection, xshift=1.5em, 
+    minimum height = 3em, minimum width=6em, label={[xshift=1em]$Y$}] {}; 
+
+\node[textnode, right of = Y, xshift=10em] {$\mathsf{H}(z_i): = h_i \sample D$};
+\end{tikzpicture}
+\end{center}
+
+\item $\text{Hybrid}_1$: $\SimS$ simulates without the knowledge of $Y$, 
+    and changes the simulation in the final input.  
+\begin{itemize}
+    \item $\SimS$ outputs $(s_1, \dots, s_n)$ where $s_i \sample D$.       
+\end{itemize}
+We argue that the view in hybrid 0 and hybrid 1 are computationally indistinguishable. 
+More precisely, a PPT adversary $\mathcal{A}$ \red{(with knowledge of $X$ and $Y$)} 
+against commutative weak PRF (with secret key $k$) is given $n$ tuples $(h_i, s_i)$ where $h_i \sample D$, 
+and is asked to distinguish if $s_i = F_k(h_i)$ or $s_i$ are random values. 
+$\mathcal{A}$ implicitly sets $\mathcal{R}$'s randomness $k_2:=k$. 
+\begin{itemize}
+    \item RO queries: for random oracle query $\langle z \rangle$ where $z \notin Y$,  
+        picks $h \sample D$ and set $\mathsf{H}(z):=h$; for random oracle query $\langle y_i \rangle$ where $y_i \in Y$, 
+        sets $\mathsf{H}(y_i):=h_i$.  
+
+    \item $\mathcal{A}$ outputs $(s_1, \dots, s_n)$.      
+\end{itemize}
+
+If $s_i = F_k(h_i)$ for $i \in [n]$, then $\mathcal{A}$'s simulation is identical to hybrid 0. 
+If $s_i$ are random values, then $\mathcal{A}$'s simulation is identical to hybrid 1. 
+\end{trivlist}
+
+\begin{trivlist}
+\item \underline{Corrupt receiver:} $\SimR$ simulates the view of corrupt $\mathcal{R}$, 
+    which consists of $\mathcal{R}$'s randomness, input, output and received messages.
+ 
+    We argue the output of $\SimR$ is indistinguishable from the real execution. 
+    For this, we formally show the simulation by proceeding the sequence of hybrid transcripts, 
+    where $T_0$ is the real view of $\mathcal{R}$, and $T_2$ is the output of $\SimR$. 
+
+\item $\text{Hybrid}_0$: $\SimR$ simulates with the knowledge of $X$. 
+\begin{itemize}
+    \item $\SimR$ chooses the randomness for $\mathcal{S}$, i.e., picks $k_1 \sample K$.
+    
+    \item RO queries: for random oracle query $\langle z \rangle$, picks $h \sample D$ and sets $\mathsf{H}(z):=h$. 
+
+    \item $\SimR$ computes and outputs 
+        $\{F_{k_1}(\mathsf{H}(x_i))\}_{x_i \in X}$, 
+        computes $\{F_{k_1}(F_{k_2}(\mathsf{H}(y_i))\}_{y_i \in Y}$, outputs its permutation $\Gamma$.      
+\end{itemize}
+Clearly, $\SimR$'s simulation is identical to the real view. 
+
+\begin{center}
+\begin{tikzpicture}
+\node[textnode, name = intersection] {$X \cap Y$}; 
+\node[ellipsenode, name = X, left of =intersection, xshift=-1.5em, 
+    minimum height = 3em, minimum width=6em, label={[xshift=-1em]$X$}] {};
+\node[ellipsenode, name = Y, left of =intersection, xshift=1.5em, 
+    minimum height = 3em, minimum width=6em, label={[xshift=1em]$Y$}] {}; 
+
+\node[textnode, right of = Y, xshift=10em] {$\mathsf{H}(z_i): = h_i \sample D$};
+\end{tikzpicture}
+\end{center}
+
+\item $\text{Hybrid}_1$: $\SimR$ simulates without the knowledge of $X \cap Y$, 
+    but with the knowledge of $X - X \cap Y$.   
+\begin{itemize}
+    \item $\SimR$ picks $s_j \sample D$ for $j \in [n-m]$ (associated with PRF values for elements in $X - X \cap Y$), 
+        picks $s_k \sample D$ for $k \in [m]$ (implicitly associated with PRF values for elements in $X \cap Y$, 
+        though the exact elememts are unknown), 
+        outputs $(\{s_j\}_{j \in [n-m]}, \{s_k\}_{k \in m})$ according to the order of the final selection vector; 
+        picks $s_\ell \sample D$ for $\ell \in [n-m]$ (associated with PRF values for elements in  $Y - X \cap Y$),  
+        outputs the permutation of $(\{F_{k_2}(s_k)\}_\{k \in [m]\}, \{F_{k_2}(s_\ell)\}_{\ell \in [n-m]})$.                
+\end{itemize}
+
+We argue that the view in hybrid 1 and hybrid 2 are computationally indistinguishable. 
+More precisely, a PPT adversary $\mathcal{A}$ \red{(with knowledge of $X$ and $Y$)} against commutative weak PRFs 
+are given $n+m$ tuples $(h_i, s_i)$ where $h_i \sample D$, and is asked to determine if $s_i = F_{k}(h_i)$ or random values. 
+$\mathcal{A}$ implicitly sets $\mathcal{S}$'s randomness $k_1:=k$, picks $k_2 \sample K$. 
+\begin{itemize}
+    \item RO queries: for $z \notin X \cup Y$, picks $h \sample D$ and returns $\mathsf{H}(z):=h$; 
+        for $z_i \in X \cup Y$, returns $\mathsf{H}(z_i) = h_i$. 
+
+    \item $\mathcal{A}$ prepares $s_j$ for $z_i \in X - X \cap Y$, 
+        $s_k$ for $z_k \in X \cap Y$, 
+        outputs $(\{s_j\}_{j \in [n-m]}, \{s_k\}_{k \in m})$ according to the order of the final selection vector; 
+        prepares $s_\ell \sample D$ for $z_\ell \in Y - X \cap Y$,  
+        outputs the permutation of $(\{F_{k_2}(s_k)\}_{k \in [m]}, \{F_{k_2}(s_\ell)\}_{\ell \in [n-m]})$.               
+\end{itemize}
+
+If $s_i$ are function values, then the simulation is identical to hybrid 0, 
+else it is identical to hybrid 1. 
+\end{trivlist}
+\end{proof}
+
+
+
+
+
+
+\section{Instantiation Based on the DDH Assumption}\label{sec:protocols}
+We construct a linear complexity PSU protocol from the DDH assumption in Figure~\ref{fig:DH-PSU}.  
+\begin{figure}[!hbtp]
+\begin{framed}
+\begin{minipage}[center]{\textwidth}
+\begin{trivlist}
+\item \textbf{Parameters:} 
+\begin{itemize}
+    \item Common input: $\mathbb{G} = \langle g \rangle$, hash function $\mathsf{H}: \{0,1\}^* \rightarrow \mathbb{G}$. 
+
+    \item Input of sender $\mathcal{S}$: $X = \{x_1, \dots, x_n\}$.
+
+    \item Input of receiver $\mathcal{R}$: $Y = \{y_1, \dots, y_n\}$. 
+\end{itemize}
+
+\item \textbf{Protocol:}
+
+\begin{enumerate}
+\item $\mathcal{R}$ picks $b \sample \mathbb{Z}_p$, then sends $(\mathsf{H}(y_1)^b, \dots, \mathsf{H}(y_n)^b)$ to $\mathcal{S}$. 
+
+\item $\mathcal{S}$ picks $a \sample \mathbb{Z}_p$, 
+    sends $(\mathsf{H}(x_1)^a, \dots, \mathsf{H}(x_n)^a)$ to $\mathcal{R}$; 
+    he also computes $(\mathsf{H}(y_1)^b)^a, \dots, \mathsf{H}(y_n)^b)^a)$ and sends its permutation $\Gamma$ to $\mathcal{R}$. 
+
+
+\item $\mathcal{R}$ computes $(\mathsf{H}(x_1)^a)^b, \dots, \mathsf{H}(x_n)^a)^b)$, 
+    then sets $v_i = 0$ iff the value is not in $\Gamma$. 
+
+\item $\mathcal{R}$ with select vector $(v_1, \dots, v_n)$ and $\mathcal{S}$ with input $\{(x_i, \bot)\}_{i \in [n]}$ 
+    engage in one-sided OT. 
+
+\item $\mathcal{R}$ obtains $X - X \cap Y$, and thus obtains the union $X \cup Y$.  
+\end{enumerate}
+\end{trivlist}
+\end{minipage}
+\end{framed}
+\caption{DH-PSU}\label{fig:DH-PSU}
+\end{figure}
+
+\begin{theorem}
+The above PSU protocol is secure in the semi-honest model assuming $\mathsf{H}$ is a random oracle and the DDH assumption.
+\end{theorem}
+
+\begin{proof}
+We exhibit simulators $\SimR$ and $\SimS$ for simulating corrupt $\mathcal{R}$ and $\mathcal{S}$ respectively, 
+and argue the indistinguishability of the produced transcript from the real execution. Let $|X \cap Y| = m$. 
+
+
+\begin{trivlist}
+\item \underline{Corrupt sender:} $\SimS$ simulates the view of corrupt $\mathcal{S}$, 
+    which consists of $\mathcal{S}$'s randomness, input, output and received messages.
+
+    Intuitively, the crux of the security proof is to simulate sender's view without the knowledge of $Y$, 
+    more precisely, the knowledge of $X \cap Y$. 
+    Looking ahead, we will use RO to program the hash outputs for elements in $Y - X \cap Y$ naively, 
+    and program the hash outputs for elements in $X$ in a special way to ensure the associated messages sent from $\mathcal{R}$ 
+    are pseudorandom. 
+ 
+    We argue the output of $\SimS$ is indistinguishable from the real execution. 
+    For this, we formally show the simulation by proceeding the sequence of hybrid transcripts, 
+    where $T_0$ is the real view of $\mathcal{S}$, and $T_2$ is the output of $\SimS$. 
+
+\item $\text{Hybrid}_0$: $\SimS$ simulates with the knowledge of $Y$. 
+\begin{itemize}
+    \item $\SimS$ chooses the randomness for $\mathcal{R}$, i.e., picks $b \sample \mathbb{Z}_p$.
+    
+    \item RO queries: picks $h_i \sample \mathbb{G}$ and sets $\mathsf{H}(z_i):=h_i$. 
+
+    \item $\SimS$ outputs $h_i^b$ for $y_i \in Y$.     
+\end{itemize}
+Clearly, $\SimS$'s simulation is identical to the real view. 
+
+\begin{center}
+\begin{tikzpicture}
+\node[textnode, name = intersection] {$X \cap Y$}; 
+\node[ellipsenode, name = X, left of =intersection, xshift=-1.5em, 
+    minimum height = 3em, minimum width=6em, label={[xshift=-1em]$X$}] {};
+\node[ellipsenode, name = Y, left of =intersection, xshift=1.5em, 
+    minimum height = 3em, minimum width=6em, label={[xshift=1em]$Y$}] {}; 
+
+\node[textnode, right of = Y, xshift=10em] {$\mathsf{H}(z_i): = h_i \sample \mathbb{G}$};
+\end{tikzpicture}
+\end{center}
+
+\item $\text{Hybrid}_1$: $\SimS$ still simulates with the knowledge of $Y$, 
+    but slightly change the simulation of random oracle 
+\begin{itemize}
+    \item RO queries: picks $d_i, e_i \sample \mathbb{Z}_p$, sets $\mathsf{H}(z_i):= h_i = h^{d_i} \cdot g^{e_i}$. 
+        Here, $h$ is a fixed random group element.  
+
+    \item $\SimS$ outputs $h_i^b$ for $y_i \in Y$.            
+\end{itemize}
+The modification in RO simulation does not alter the view. 
+
+\begin{center}
+\begin{tikzpicture}
+\node[textnode, name = intersection] {$X \cap Y$}; 
+\node[ellipsenode, name = X, left of =intersection, xshift=-1.5em, 
+    minimum height = 3em, minimum width=6em, label={[xshift=-1em]$X$}] {};
+\node[ellipsenode, name = Y, left of =intersection, xshift=1.5em, 
+    minimum height = 3em, minimum width=6em, label={[xshift=1em]$Y$}] {}; 
+
+\node[textnode, right of = Y, xshift=10em] {$\mathsf{H}(z_i) := h_i = h^{d_i} \cdot g^{d_i}$}; 
+\end{tikzpicture}
+\end{center}
+
+\item $\text{Hybrid}_2$: $\SimS$ simulates without the knowledge of $Y$, 
+    and changes the simulation in the final input.  
+\begin{itemize}
+    \item $\SimS$ outputs random $f_i$ for $i \in [n]$.       
+\end{itemize}
+We argue that the view in hybrid 2 and hybrid 3 are computationally indistinguishable. 
+More precisely, given $(g, g^\alpha, g^\beta, g^\gamma)$, 
+a PPT adversary $\mathcal{A}$ \red{(with knowledge of $X$ and $Y$)} implicitly sets $\mathcal{R}$'s randomness $b:=\alpha$. 
+\begin{itemize}
+    \item RO queries: sets $h := g^\beta$; picks $d_i, e_i \sample \mathbb{Z}_p$, sets $\mathsf{H}(z_i):=h^{d_i} \cdot g^{e_i}$. 
+
+    \item $\mathcal{A}$ outputs $g^{\gamma d_i + \alpha e_i}$ for $i \in [n]$.      
+\end{itemize}
+
+If $(g, g^\alpha, g^\beta, g^\gamma)$ is a DDH tuple, then the simulation is identical to hybrid 1, 
+else it is identical to hybrid 2. 
+\end{trivlist}
+
+\begin{trivlist}
+\item \underline{Corrupt receiver:} $\SimR$ simulates the view of corrupt $\mathcal{R}$, 
+    which consists of $\mathcal{R}$'s randomness, input, output and received messages.
+ 
+    We argue the output of $\SimR$ is indistinguishable from the real execution. 
+    For this, we formally show the simulation by proceeding the sequence of hybrid transcripts, 
+    where $T_0$ is the real view of $\mathcal{R}$, and $T_2$ is the output of $\SimR$. 
+
+\item $\text{Hybrid}_0$: $\SimR$ simulates with the knowledge of $X$. 
+\begin{itemize}
+    \item $\SimR$ chooses the randomness for $\mathcal{S}$, i.e., picks $a \sample \mathbb{Z}_p$.
+    
+    \item RO queries: picks $h_i \sample \mathbb{G}$ and sets $\mathsf{H}(z_i):=h_i$. 
+
+    \item $\SimR$ computes and outputs $\{h_i^{a}\}_{x_i \in X}$; 
+        computes $\{(h_i^{b})^a\}_{y_i \in Y}$, outputs its permutation.      
+\end{itemize}
+Clearly, $\SimR$'s simulation is identical to the real view. 
+
+\begin{center}
+\begin{tikzpicture}
+\node[textnode, name = intersection] {$X \cap Y$}; 
+\node[ellipsenode, name = X, left of =intersection, xshift=-1.5em, 
+    minimum height = 3em, minimum width=6em, label={[xshift=-1em]$X$}] {};
+\node[ellipsenode, name = Y, left of =intersection, xshift=1.5em, 
+    minimum height = 3em, minimum width=6em, label={[xshift=1em]$Y$}] {}; 
+
+\node[textnode, right of = Y, xshift=10em] {$\mathsf{H}(z_i): = h_i \sample \mathbb{G}$};
+\end{tikzpicture}
+\end{center}
+
+\item $\text{Hybrid}_1$: $\SimR$ still simulates with the knowledge of $X$, 
+    but slightly changes the simulation of random oracle 
+\begin{itemize}
+    \item RO queries: for $z_i \notin Y$, picks $r_i \sample \mathbb{Z}_p$ and sets $\mathsf{H}(z_i):= h_i = g^{r_i}$; 
+        for $z_i \in Y$, 
+        picks $d_i, e_i \sample \mathbb{Z}_p$, sets $\mathsf{H}(z_i):= h_i = h^{d_i} \cdot g^{e_i}$. 
+        Here, $h$ is a fixed random group element.  
+
+    \item $\SimR$ computes and outputs $\{h_i^{a}\}_{x_i \in X}$; 
+        computes $\{(h_i^{b})^a\}_{y_i \in Y}$, outputs its permutation.               
+\end{itemize}
+The modification in RO simulation does not alter the view. 
+
+\begin{center}
+\begin{tikzpicture}
+\node[textnode, name = intersection] {$X \cap Y$}; 
+\node[ellipsenode, name = X, left of =intersection, xshift=-1.5em, 
+    minimum height = 3em, minimum width=6em, label={[xshift=-1em]$X$}] {};
+\node[ellipsenode, name = Y, left of =intersection, xshift=1.5em, 
+    minimum height = 3em, minimum width=6em, label={[xshift=1em]$Y$}] {}; 
+
+\node[textnode, right of = Y, xshift=14em] {\(\displaystyle
+\mathsf{H}(z_i) = \left\{ \begin{array}{cl}
+g^{r_i} & \text{if } z_i \notin Y\\
+h^{d_i} \cdot g^{d_i}  & \text{if } z_i \in Y\\ 
+\end{array} \right. \)};  
+\end{tikzpicture}
+\end{center}
+
+\item $\text{Hybrid}_2$: $\SimR$ simulates without the knowledge of $X$, 
+    and changes the simulation in the final input.  
+\begin{itemize}
+    \item $\SimR$ computes $f_j = h_j^{a}$ for $x_j \in X - X \cap Y$ (note that the information of such $x_j$ 
+        can be inferred from $\mathcal{R}$'s output), picks random $f_k$ for $k \in [m]$ 
+        (implicitly assigned for elements in $X \cap Y$), outputs $(f_1, \dots, f_n)$; 
+        then picks random $f_\ell$ for $\ell \in [n-m]$ (implicitly assigned to elements in $Y - X \cap Y$), 
+        outputs the permutation of $(\{f_k^b\}_{k \in [m]}, \{f_\ell^b\}_{\ell \in [n-m]})$.        
+\end{itemize}
+We argue that the view in hybrid 2 and hybrid 3 are computationally indistinguishable. 
+More precisely, given $(g, g^\alpha, g^\beta, g^\gamma)$, 
+a PPT adversary $\mathcal{A}$ \red{(with knowledge of $X$ and $Y$)} 
+implicitly sets $\mathcal{S}$'s randomness $a:=\alpha$, picks $b \sample \mathbb{Z}_p$. 
+\begin{itemize}
+    \item RO queries: sets $h := g^\beta$; 
+        for $z_i \notin Y$, picks $r_i \sample \mathbb{Z}_p$ and sets $\mathsf{H}(z_i):= h_i = g^{r_i}$; 
+        for $z_i \in Y$, 
+        picks $d_i, e_i \sample \mathbb{Z}_p$, sets $\mathsf{H}(z_i):= h_i = h^{d_i} \cdot g^{e_i}$.  
+
+    \item $\mathcal{A}$ computes $f_j = (g^\alpha)^{r_i}$ for $x_j \in X - X \cap Y$, 
+        computes $f_k = g^{\gamma d_k + e_k}$ for $k \in [m]$, outputs $(f_1, \dots, f_n)$; 
+        then prepares $f_\ell = g^{\gamma d_\ell + e_\ell}$ for $\ell \in [n-m]$, 
+        outputs the permutation of $(\{f_k^b\}_{k \in [m]}, \{f_\ell^b\}_{\ell \in [n-m]})$.          
+\end{itemize}
+
+If $(g, g^\alpha, g^\beta, g^\gamma)$ is a DDH tuple, then the simulation is identical to hybrid 1, 
+else it is identical to hybrid 2. 
+\end{trivlist}
+\end{proof}

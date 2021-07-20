@@ -1,0 +1,67 @@
+\section{Preliminaries}\label{sec:preliminaries}
+
+\subsection{MPC in the Semi-honest Model}
+We use the standard notion of security in the presence of semi-honest adversaries. 
+Let $\Pi$ be a protocol for computing the function $f(x_1, x_2)$, where party $P_i$ has input $x_i$. 
+We define security in the following way.
+For each party $P$, let $\text{View}_P(x_1, x_2)$ denote the view of party $P$ 
+during an honest execution of $\Pi$ on inputs $x_1$ and $x_2$. 
+The view consists of $P$'s input, random tape, and all messages exchanged as part of the $\Pi$ protocol. 
+
+\begin{definition}
+2-party protocol $\Pi$ securely realizes $f$ in the presence of semi-honest adversaries if 
+there exists a simulator $\mathsf{Sim}$ such that for all inputs $x_1, x_2$ and all $i \in \{1,2\}$:
+\begin{gather*}
+\mathsf{Sim}(i, x_i, f(x_1, x_2)) \approx_c \text{View}_{P_i}(x_1, x_2)
+\end{gather*}
+\end{definition}
+
+
+\subsection{Private Set Union}\label{subsec:psu}
+PSU is a special case of secure two-party computation. 
+We call the two parties engaging in PSU the \emph{sender} and the \emph{receiver}. 
+The sender holds a set $X$ of size $n_\mathsf{x}$, and the receiver holds a set $Y$ of size $n_\mathsf{y}$. 
+Both sets consist of $\sigma$-bit strings. 
+We always assume the set sizes $n_\mathsf{x}$ and $n_\mathsf{y}$ are public.  
+The ideal PSU functionality (depicted in Figure~\ref{fig:fpsu}) computes the union, 
+outputs nothing to the sender, and $X \cup Y$ to the receiver.
+
+
+\begin{figure}[!hbtp]
+\begin{framed}
+\begin{minipage}[center]{\textwidth}
+\begin{trivlist}
+\item \textbf{Parameters:} 
+\begin{itemize}
+\item Sender $\mathcal{S}$, Receiver $\mathcal{R}$
+\item Set sizes $n_\mathsf{x}$ and $n_\mathsf{y}$
+\end{itemize}
+
+\item \textbf{Functionality:}
+\begin{itemize}
+\item Wait for input $X=\{x_1,\dots,x_{n_\mathsf{x}}\}\subset \{0,1\}^*$ from the receiver $\mathcal{S}$.
+\item Wait for input $Y=\{y_1,\dots,y_{n_\mathsf{y}}\}\subset \{0,1\}^*$ from the sender $\mathcal{R}$.
+\item Give output $X \cup Y$ to the receiver $\mathcal{R}$.
+\end{itemize}
+\end{trivlist}
+\end{minipage}
+\end{framed}
+\caption{Private Set Union Functionality $\FuncPSU$}\label{fig:fpsu}
+\end{figure}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
