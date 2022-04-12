@@ -1,21 +1,14 @@
-%\newcommand{\path}{./PaperEngine}
 \newcommand{\path}{/Users/chenyu/Documents/Research/PaperEngine}
 \documentclass[a4paper,10pt]{article}
 
 \input{\path/paper/mypapersetting}
 
-\usepackage{enumerate}
-\usepackage{enumitem}
-\usepackage{setspace}
-\usepackage{framed}
-\usepackage{amsthm,amsmath,amssymb}
-\usepackage{mathrsfs}
-\usepackage{graphicx}
-\usepackage{float}
 
-\newcommand{\FuncOT}{\mathcal{F}_\mathsf{ot}}
-\newcommand{\FuncPSU}{\mathcal{F}_\mathsf{psu}}
-\newcommand{\FuncPSI}{\mathcal{F}_\mathsf{psi}}
+\newcommand{\FuncOT}{\mathcal{F}_\mathsf{OT}}
+\newcommand{\FuncMQRPMT}{\mathcal{F}_\mathsf{mqRPMT}}
+\newcommand{\FuncPSU}{\mathcal{F}_\mathsf{PSU}}
+\newcommand{\FuncPSI}{\mathcal{F}_\mathsf{PSI}}
+\newcommand{\FuncPSO}{\mathcal{F}_\mathsf{PSO}}
 
 \newcommand{\SimR}{\mathsf{Sim}_\mathcal{R}}
 \newcommand{\SimS}{\mathsf{Sim}_\mathcal{S}}
@@ -24,7 +17,7 @@
 
 \thispagestyle{empty}
 
-\title{Optimal PSO from Commutative Weak Pseudorandom Functions}
+\title{Private Set Operations from Multi-Query Reverse Private Membership Test}
 
 % \author{
 %   Min Zhang
@@ -39,11 +32,35 @@
 \maketitle
 
 \begin{abstract}
-XXX
+Private set operations allow two parties perform secure computation on two private sets, 
+such as intersection or union related functions. 
+In this paper, we identify a framework for performing private set operations. 
+At the technical core of our framework is multi-query reverse private membership test (mqRPMT), 
+which is a natural extension of RPMT recently proposed by Kolesnikov et al.~\cite{KRTW-ASIACRYPT-2019}. 
+In mqRPMT, a client with elements vector $(x_1, \dots, x_n)$ interacts with a server holding a set $Y$. 
+As a result, the server only learns a bit vector $(e_1, \dots, e_n)$ indicating whether $x_i \in Y$ 
+but without knowing the value of $x_i$, while the client learns nothing. 
+We first show how to build mqRPMT from a new cryptographic primitive called 
+commutative weak  pseudorandom function (cwPRF), 
+which in turn can be instantiated from the decisional Diffie-Hellman like assumptions in the random oracle model. 
+We then show a relaxed version of mqRPMT can be build from a category of mqPMT 
+(which in turn can be based on homomorphic encryption), 
+making the first step towards establishing the relation between the two primitives.    
+
+We demonstrate the practicality of our framework with an implementation. 
+By plugging our wcPRF-based mqRPMT to the general framework, 
+we obtain competitive PSU protocol. 
+For input sets of size $2^{20}$, the resulting PSU protocol requires roughly 100 MB bandwidth, 
+and 200 seconds using a single thread. 
+To the best of our knowledge, it requires the least communication among all the known PSU protocols. 
+By plugging our FHE-based mqRPMT$^*$ to the general framework, 
+we obtain a PSU$^*$ suitable for unbalanced setting, whose communication complexity is linear in the size of the smaller set, 
+and logarithmic in the larger set.    
+%Our protocol is amenable to parallelization.  
   
            
 \begin{trivlist}
-\item \textbf{Keywords:} XXX
+\item \textbf{Keywords:} PSO, PSU, commutative weak PRF, multi-query RPMT
 \end{trivlist}
 \end{abstract}
 
@@ -58,19 +75,1659 @@ XXX
 \pagenumbering{arabic}
 \setcounter{page}{1}
 	
-		
-\input{1-Introduction}
-\input{2-Preliminaries}
-\input{3-weak-PRF}
-\input{4-Protocols}
+	
+
+\section{Introduction}\label{sec:introduction}
+Private set operation enables two parties, a sender ($P_1$) and a receiver ($P_2$), with respective input sets $X$ and $Y$ 
+to compute the intersection $X \cap Y$ or union $X \cup Y$ without revealing anything else. 
+When measuring the efficiency of a PSO protocol, there are two major metrics. 
+The first is \emph{computation cost}, which is the amount of computing time necessary to run the protocol. 
+Optimizing the computation cost is especially important in practice because of limited computational resources. 
+The second is \emph{communication cost},  which is the total amount of communication in the protocol. 
+Minimizing the communication cost is also crucial in practice due to limited network bandwidth. 
+A hybrid metric is the total running time of the protocol, which includes both the computation time 
+and the time to transmit and receive the messages. 
+Recent works~\cite{PRTY-CRYPTO-2019, Ion-EUROSP-2020} suggest an alternative efficiency metric -- 
+the \emph{monetary cost} to run the protocol 
+on a cloud computing service. This new metric takes both computation cost and communication cost into consideration.  
+
+We briefly review PSO protocols in the semi-honest model as below. (add balanced and unbalanced here)
+
+\begin{trivlist}
+\item \textbf{Private set intersection.} PSI has found many applications including privacy-preserving sharing, 
+    private contact discovery, DNA testing and pattern matching. 
+    In the past two decades PSI has been extensively studied and 
+    has become truly practical with extremely fast implementation.  
+    We refer to~\cite{PSZ-ACM-2018} for a good survey of different PSI paradigms. 
+    State-of-the-art two party PSI protocols~\cite{KKRT-CCS-2016, PRTY-CRYPTO-2019, CM-CRYPTO-2020, 
+    GPRTY-CRYPTO-2021, RS-EUROCRYPT-2021} mainly rely on symmetric-key operations, 
+    except a little public-key operations in base OT used in the OT extension protocol. 
+
+\item \textbf{Private computing on the intersection.} Many real-world applications requires only 
+    partial/aggregate information about the intersection to be revealed, 
+    such as PSI-card for intersection cardinality~\cite{HFH-EC-1999} 
+    and PSI-sum for intersection sum~\cite{Ion-EUROSP-2020, MPRSY-CRYPTO-2020}. 
+
+\item \textbf{Private set union.} Like well-researched PSI, PSU also has numerous applications in practice, 
+    such as cyber risk assessment and management via joint IP blacklists and joint vulnerability data. 
+    There are two categories of existing PSU protocols. 
+    The first is mainly based on public-key techniques~\cite{KS-CRYPTO-2005, Frikken-ACNS-2007, HN-PKC-2010, DC-ACISP-2017}. 
+    The second is mainly based on symmetric-key techniques~\cite{KRTW-ASIACRYPT-2019, GMRSS-PKC-2021}.   
+    In contrast to the affairs of PSI, the efficiency of the state-of-the-art PSU is less satisfactory. 
+    None of existing protocols is optimal in the sense that both communication and computation complexity 
+    is linear in the size of sets. 
+\end{trivlist} 
+
+PSI, PSI-card/PSI-sum and PSU are closely related functionalities. 
+It is somewhat surprising that the state-of-the-art protocols for these functionalities have significantly different efficiency. 
+In balanced setting, there is no PSU protocol with linear complexity in the literature.  
+\blue{The simplest PSI-card is concretely about $20 \times$ slower and requires over $30 \times$ 
+more communication than PSI. 
+PSU is concretely about $20 \times$ slower and requires over $30 \times$ more communication than PSI.} 
+In unbalanced setting, there is no PSU protocol with sublinear complexity in the larger set in the literature.   
+Why is this the case? We observe that the core primitive that underlies almost all PSI protocols 
+is a protocol called multi-query private membership test (PMT), which has very efficient realizations. 
+However, it seems that mqPMT does not readily implies PSI-card/PSI-sum or PSU. 
+The reason is that mqPMT reveals information about intersection, which should be kept privately in PSI-sum/PSI-card and PSU. 
+
+\subsection{Motivation}
+The above discussion indicates that the most efficient approach for PSI cannot be used in PSI-card/PSI-sum and PSU. 
+Therefore, different approaches are employed in different private set operations, 
+creating much more engineering effort. 
+We are motivated to seek for the core protocol that enables all private set operations, 
+with the hope to deploy PSO in a unified framework.     
+Moreover, given the huge efficiency difference between PSI and other closely related protocols, 
+we are motivated to give efficient construction of the core protocol to close the gap. 
+In summary, we are motivated to answer the following questions:
+\begin{center}
+\emph{Is there a core protocol that enables a unified framework for all private set operations? 
+If so, can we give efficient constructions?} 
+\end{center}  
+
+\subsection{Our Contribution}
+In this work, we make positive progress on the aforementioned questions. 
+We summarize our contribution as below. 
+
+\begin{trivlist}
+\item \textbf{A framework of PSO.} We identify that multi-query reverse private membership test (mqRPMT) 
+    is a ``Swiss army knife'' for private set operations. 
+    More precisely, mqRPMT itself implies PSI-card; by coupling with OTe, mqRPMT implies PSI and PSU; 
+    by further coupling with secret sharing or additively homomorphic encryption, mqRPMT implies PSI-sum.  
+    Therefore, we can build a PSO framework central around mqRPMT, 
+    which can perform operations in a unified and flexible manner.  
+    
+\item \textbf{Efficient construction of mqRPMT.} We propose a generic construction of mqRPMT with linear complexity
+    from a new cryptographic primitive called commutative weak PRF, 
+    which in turn can be instantiated from the DDH like assumptions in the random oracle model. 
+    The construction is simple and enjoys linear communication and computation complexity. 
+    Note that the asymptotic complexity of our PSO framework is dominated by the underlying mqRMPT. 
+    Therefore, all protocols derived from our framework achieve linear complexity. 
+    \blue{Particularly, to the best of our knowledge, it is the first time to have PSU with linear complexity.}
+
+\item \textbf{Relaxed mqRPMT.} We proprose a relaxed version of mqRPMT (denoted mqRPMT$^*$ hereafter). 
+    Compared to the standard mqRPMT, mqRPMT$^*$ allows the sender learn the size of intersection. 
+    We show that mqRMPT$^*$ can be build from a special category of mqPMT in a black-box manner 
+    via the ``permutate-then-test'' recipe. 
+    This makes the initial step towards exploring the connection between mqRPMT and mqPMT. 
+    By instantiating the conversion with fully homomorphic encryption (FHE), 
+    we obtain an effcient mqRPMT$^*$ in unbalanced setting, 
+    which immediately gives rise to a PSU$^*$ protocol in unbalanced setting.      
+
+\item \textbf{Evaluations.} We implement our framework. 
+    The experimental results demonstrate that our PSU protocol is superior to all the known PSU protocols 
+    in terms of communication cost.   
+\end{trivlist}
+
+
+\subsection{Technical Overview}
+
+\begin{trivlist}
+\item \textbf{PSO from mqRPMT.} As discussed above, 
+    mqPMT that underlies leading PSI protocols is not applicable for computing PSU as well as other closely related function 
+    such as PSI-card and PSI-sum. 
+    Consquently, there is no unified framework for PSO.  
+    We examine the reverse direction, i.e., whether the core protocol underlying PSU can be used for computing PSI. 
+    We identify that the technical core beneath all the existing PSU protocols is mqRPMT, 
+    which is a generalization of RPMT proposed in~\cite{KRTW-ASIACRYPT-2019}. 
+    Roughly speaking, mqRPMT is a two party protocol between a client with set $X$ and 
+    a server $S$ with set $X$. 
+    After execution of the protocol, the server learns an indication bit vector $(e_1, \dots, e_n)$ 
+    such that $e_i = 1$ if and only if $x_i \in Y$ but without knowning $x_i$, while the client learns nothing. 
+    Superficially, mqRPMT is similar to mqPMT, 
+    except that the server but not the client learns the test results instead.  
+    This tiny difference turns out to be significant. 
+    To see this, note that in mqRPMT the information of intersection (except its cardinality) is hidden from both sides, 
+    while in mqPMT the intersection is finally known by the client. 
+    In light of this difference, mqRPMT is particular suitable for functionalities that have to keep intersection private. 
+    A PSU protocol is immediate by having the sender (play the role of client) and the receiver (play the role of server) 
+    invoke a mqRPMT protocol on the first place, 
+    then carrying out $n$ one-out-two OT with $e_i$ and $(\bot, y_i)$ respectively. 
+    PSI and other protocols such as PSI-card and PSI-sum can be constructed similarly 
+    by coupling with additively homomorphic encryption or secret sharing. 
+
+\item \textbf{mqRPMT from cwPRFs.} The seminal PSI protocol~\cite{Meadows-SP-1986} 
+    (related ideas were appeared in~\cite{Shamir-ICALP-1980, HFH-EC-1999}) 
+    is based on the commutative properties of the DH function. 
+    After roughly four decades, 
+    the DH-based PSI protocol is still the most easily understood and communication efficient one 
+    among numerous PSI protocols. It is somewhat surprisingly that no counterpart is known in the PSU setting yet.  
+    An intriguing question is: Can DH strike back?
+
+    In this work, we give an affirmative answer. 
+    We propose a new cryptographic primitive called commutative weak PRF. 
+    Let $F: K \times D \rightarrow R$ be a family of weak PRFs, where $R \subseteq D$. 
+    We say $F$ is commutative if for any $k_1, k_2 \in K$ and any $x \in D$, 
+    it holds that $F_{k_1}(F_{k_2}(x)) = F_{k_2}(F_{k_1}(x))$. 
+    In other words, the two composite functions $F_{k_1} \circ F_{k_2}$ and $F_{k_2} \circ F_{k_1}$ 
+    are essentially the same function, say, $\hat{F}$.    
+
+    We then show how to build mqRPMT from cwPRFs.   
+    Let server and client generate cwPRF key $k_1$ and $k_2$ respectively, 
+    and both of them map their items to elements in the domain $D$ of $F$ 
+    via a common cryptographic hash function $\mathsf{H}$, which will be modeled as a random oracle. 
+    We begin with the construction of the basic single-query RPMT.
+    We first observe that cwPRF immediately gives rise to a private equality test (PEQT) protocol. 
+    Suppose server with $y$ and client with $x$, they perform PEQT via the following steps: 
+    (1) server computes and sends $F_{k_1}(\mathsf{H}(y))$ to client; 
+    (2) client computes and sends $F_{k_2}(\mathsf{H}(x))$ and $F_{k_2}(F_{k_1}(\mathsf{H}(y)))$ to server; 
+    (3) $P_1$ then learns the test result by comparing $F_{k_1}(F_{k_2}(\mathsf{H}(x))) =? F_{k_2}(F_{k_1}(\mathsf{H}(y)))$. 
+    The commutative property of $F$ guarantee the correctness. 
+    The weak pseudorandomness of $F$ guarantee that $P_2$ learns nothing 
+    and $P_1$ learns nothing beyond the test result.  
+    At a high level, 
+    $F_{k_2}(F_{k_1}(\mathsf{H}(\cdot))) = F_{k_1}(F_{k_2}(\mathsf{H}(\cdot))) = \hat{F}(\mathsf{H}(\cdot))$ 
+    serves as pseudorandom encoding in the joint view, 
+    while $F_{k_1}(\mathsf{H}(\cdot))$ and $F_{k_2}(\mathsf{H}(\cdot))$ 
+    serve as partial pseudorandom encoding in the views of server and client respectively.
+    
+    But, direct extension of the above PEQT protocol by sending back $F_{k_2}(F_{k_1}(\mathsf{H}(y_i)))$ 
+    for each $y_i \in Y$ in the same order with server's first move message $F_{k_1}(\mathsf{H}(y_i))$ 
+    does not lead to a RPMT protocol. 
+    The reason is that $\{\hat{F}(\mathsf{H}(y_i))\}$ serves as an order preserving pseudorandom encoding of set $Y$. 
+    As a consequence, the server will learn the exact value of $x$ if $x \in Y$.  
+    In order to perform the membership test in an oblivious manner, 
+    the idea is to make the pseudorandom encoding of $Y$ independent of the order known by the server. 
+    The most straightforward approach is to permutate $\{\hat{F}(\mathsf{H}(y_i))\}$. 
+    In this way, we build a single query RMPT protocol from cwPRFs, 
+    and the resulting protocol can be easily batched to handle multiple queries 
+    by reusing the pseudorandom encoding of $X$. 
+    A simple calculation shows that the computation cost is $3n$ times evaluation of $F$ and $n$ times look up, 
+    and the communication cost is $3n$ elements in the range of $F$. 
+    The mqRPMT protocol is optimal in the sense that both computation and communication complexity 
+    is linear to the set size.  
+    A more efficient method is to insert $\{\hat{F}(\mathsf{H}(y_i))\}$ into an order hiding data structure 
+    such as the Bloom filter, instead of permuting them. 
+
+\item \textbf{mqRPMT$^*$ from mqPMT.} We first abstract a category of PMT protocol called amortized Sigma-PMT 
+    with stateless test. Such-PMT naturally give rises to mqPMT, which underlies many PSI protocols with linear complexity. 
+    Following the permute-then-recover approach, we can tweak such mqPMT to mqRPMT$^*$ with same asymptotic complexity.  
+
+\item \textbf{Applications of multi-query RPMT.} With multi-query RPMT in hand, we can build a general PSO framework. 
+    Multi-query RPMT itself immediately give rise to private set intersection/union cardinality. 
+    Coupling with oblivious transfer, we can obtain PSI, private set intersection sum or PSU, 
+    depending the messages on OT sender's side. 
+\end{trivlist}
+
+\subsection{Related Works}
+
+% In this work, we present a generic construction of PSU protocols from two-message RPMT protocol. 
+% We estabilish a connection between PMT and RPMT. 
+% More precisely, starting from any reusable two-message PMT protocol, we can convert it to reusable two-message RPMT protocols. 
+% By plugging exisiting reusable two-message PMT protocol, we obtain several efficient reusable two-message RPMT protocols, 
+% and thus also efficient PSU protocols with desired features. 
+
+% At the technical core of our PSU construction is the reverse private membership test (RPMT). 
+
+% Kolesnikov et al.~\cite{KRTW-ASIACRYPT-2019} identify that existng fast private membership tests, 
+% used in leading PSI protocols are not immediately applicable for computing PSU, 
+% and a richer PMT of~\cite{CO-SCN-2018} carries $125 \times$ performance penalty. 
+
+% This seemingly simple functionality adjustment (PMT→RPMT) doesn’t seem to be fixable by a small tweak of PMT. 
+% This is because the underlying primitive used to implement fast PMT [KKRT16] is a variant of OT extension, 
+% and the role of OT receiver naturally belongs to the player with a single-element input y; 
+% it is not clear how to amend the protocol to allow (only) the other player to receive the output.
+ 
+
+% We propose ab efficient construction of RPMT, which serves as the basis of our PSU protocol. 
+
+\section{Preliminaries}\label{sec:preliminaries}
+
+\subsection{MPC in the Semi-honest Model}
+We use the standard notion of security in the presence of semi-honest adversaries. 
+Let $\Pi$ be a protocol for computing the function $f(x_1, x_2)$, where party $P_i$ has input $x_i$. 
+We define security in the following way.
+For each party $P$, let $\text{View}_P(x_1, x_2)$ denote the view of party $P$ 
+during an honest execution of $\Pi$ on inputs $x_1$ and $x_2$. 
+The view consists of $P$'s input, random tape, and all messages exchanged as part of the $\Pi$ protocol. 
+
+\begin{definition}
+2-party protocol $\Pi$ securely realizes $f$ in the presence of semi-honest adversaries if 
+there exists a simulator $\mathsf{Sim}$ such that for all inputs $x_1, x_2$ and all $i \in \{1,2\}$:
+\begin{gather*}
+\mathsf{Sim}(i, x_i, f(x_1, x_2)) \approx_c \text{View}_{P_i}(x_1, x_2)
+\end{gather*}
+\end{definition}
+Roughly speaking, a protocol is secure if the party with $x_i$ 
+learns no more information other than $f(x_1, x_2)$ and $x_i$.  
+
+
+\subsection{Private Set Operation}\label{subsec:pso}
+PSO is a special case of secure two-party computation. 
+% We call the two parties engaging in PSU the \emph{sender} and the \emph{receiver}. 
+% The sender holds a set $X$ of size $n_\mathsf{x}$, and the receiver holds a set $Y$ of size $n_\mathsf{y}$. 
+% Both sets consist of $\sigma$-bit strings. 
+% We always assume the set sizes $n_\mathsf{x}$ and $n_\mathsf{y}$ are public.  
+% The ideal PSU functionality (depicted in Figure~\ref{fig:fpso}) computes the union, 
+% outputs nothing to the sender, and $X \cup Y$ to the receiver.
+
+\begin{figure}[!hbtp]
+\begin{framed}
+\begin{minipage}[center]{\textwidth}
+\begin{trivlist}
+\item \textbf{Parameters:} size of sets $n$.
+
+\item \textbf{Functionality:}
+On input $X = \{x_1, \dots, x_n\} \subseteq \{0,1\}^\ell$ (and possibly $V = \{v_1, \dots, v_n\}$) 
+from the sender $P_1$ and $Y = \{y_1, \dots, y_n\} \subseteq \{0,1\}^\ell$ from the receiver $P_2$: 
+\begin{itemize}
+\item \textbf{intersection:} give $X \cap Y$ to the receiver $P_2$.
+\item \textbf{union:} give $X \cup Y$ to the receiver $P_2$.
+\item \textbf{union$^*$:} give $|X \cap Y|$ to the sender $P_1$ and $X \cup Y$ to the receiver $P_2$.
+\item \textbf{intersection cardinality:} give $|X \cap Y|$ to the receiver $P_2$.  
+\item \textbf{intersection sum with cardinality:} give $|X \cap Y|$ and $S = \sum_{i: x_i \in Y} v_i$ to the sender. 
+\end{itemize}
+\end{trivlist}
+\end{minipage}
+\end{framed}
+\caption{Ideal functionality $\FuncPSO$ for PSO}\label{fig:fpso}
+\end{figure}
+
+\section{Protocol Building Blocks}
+
+\subsection{Oblivious Transfer}
+Oblivious Transfer (OT)~\cite{Rabin-ePrint-2005} is a central cryptographic primitive in the area of secure computation. 
+1-out-of-2 OT allows a sender with two input strings $(m_0, m_1)$ and a receiver with an input choice bit $b \in \{0,1\}$. 
+As a result of the OT protocol, the receiver learns $m_b$ and neither party learns any additional information. 
+Though expensive public-key operations is unavoidable for a single OT,  
+a powerful technique called OT extension~\cite{IKNP-CRYPTO-2003, KK-CRYPTO-2013, ALSZ-EUROCRYPT-2015} 
+allows one to perform $n$ OTs by only performing $O(\kappa)$ 
+public-key operations (where $\kappa$ is the computational security parameter) and $O(n)$ fast symmetric-key operations. 
+In Figure~\ref{fig:fot} we formally define the ideal functionality for OT that provides $n$ parallel instances of OT. 
+
+\begin{figure}[!hbtp]
+\begin{framed}
+\begin{minipage}[center]{\textwidth}
+\begin{trivlist}
+\item \textbf{Parameters:} number of OT instances $n$; string length $\ell$. 
+
+\item \textbf{Functionality:}
+On input $\{(m_{i,0}, m_{i,1})\}_{i \in n}$ from the sender $P_1$ 
+where each $m_{i,b} \in \{0,1\}^\ell$, and input $\vec{b} \in \{0,1\}^n$ from the receiver $P_2$: 
+\begin{itemize}
+\item Give output $(m_{1,b_1}, \dots, m_{n,b_n})$ to the receiver. 
+\end{itemize}
+\end{trivlist}
+\end{minipage}
+\end{framed}
+\caption{Ideal functionality $\FuncOT$ for OT}\label{fig:fot}
+\end{figure}
+
+\subsection{Multi-Query RPMT}
+RPMT~\cite{KRTW-ASIACRYPT-2019} refers to a protocol where the client with input $x$ 
+interacts with a server holding a set $Y$. 
+As a result, the server learns (only) the bit indicating whether $x \in Y$, 
+while the client learns nothing about the set $Y$. 
+The default notion of RPMT allows the client to query for a single element.
+While this procedure can be repeated several times, 
+one may seek more efficient solutions allowing the client to make $n$ distinct queries at a reduced cost. 
+This generalized notion of $n$-time RPMT is straightforward to define. 
+Hereafter, we refer to $n$-time RPMT as multi-query RMPT.  
+In Figure~\ref{fig:fmqrpmt} we formally define the ideal functionality for mqRPMT. 
+We also define a relaxed version of mqRPMT called mqRPMT$^*$, 
+in which the client is given $|X \cap Y|$.  
+\begin{figure}[!hbtp]
+\begin{framed}
+\begin{minipage}[center]{\textwidth}
+\begin{trivlist}
+\item \textbf{Parameters:} number of RPMT queries $n$. 
+
+\item \textbf{Functionality:}
+On input set $Y$ from the server $P_1$ 
+and input set $X = (x_1, \dots, x_n) \subseteq \{0,1\}^\ell$ from the client $P_2$: 
+\begin{itemize}
+\item Give output a vector $\vec{e} = (e_1, \dots, e_n) \in \{0,1\}^n$ to $P_1$, 
+    where $e_i = 1$ if $x_i \in Y$ and $e_i = 0$ otherwise. 
+    $^*$Also give $|X \cap Y|$ to $P_1$.  
+\end{itemize}
+\end{trivlist}
+\end{minipage}
+\end{framed}
+\caption{Ideal functionality $\FuncMQRPMT$ for multi-query RPMT}\label{fig:fmqrpmt}
+\end{figure}
+
+\section{Commutative Weak Pseudorandom Functions}
+
+\subsection{Definition of Commutative Weak PRF}
+We first recall the notion of standard pseudorandom functions (PRFs)~\cite{GGM-JACM-1986}. 
+\begin{definition}[PRF]
+A family of PRFs consists of three polynomial-time algorithms as follows: 
+\begin{itemize}
+\item $\mathsf{Setup}(1^\lambda)$: on input a security parameter $\lambda$, 
+    outputs public parameters $pp$, which specifies a family of keyed functions $F: K \times D \rightarrow R$.
+
+\item $\mathsf{KeyGen}(pp)$: on input $pp$, outputs a secret key $k \sample K$. 
+
+\item $\mathsf{Eval}(k, x)$: on input $k \in K$ and $x \in D$, outputs $y \leftarrow F(k, x)$. 
+    For notation convenience, we will write $F(k, x)$ as $F_k(x)$ interchangeably. 
+\end{itemize}
+
+The standard security requirement for PRFs is pseudorandomness. 
+\begin{trivlist}
+\item \textbf{Pseudorandomness.} Let $\mathcal{A}$ be an adversary against PRFs and define its advantage as:
+\begin{displaymath}
+    \AdvA =
+        \Pr \left[ b = b':~
+        \begin{array}{l}
+            pp \leftarrow \mathsf{Setup}(1^\lambda);\\
+            k \leftarrow \mathsf{KeyGen}(pp);\\
+            b \leftarrow \{0,1\}; \\
+            b' \leftarrow \mathcal{A}^{\mathcal{O}_\mathsf{ror}(b, \cdot)}(\lambda);
+        \end{array} 
+        \right] - \frac{1}{2},
+\end{displaymath}
+where $\mathcal{O}_\mathsf{ror}(0, x) = F_k(x)$, $\mathcal{O}_\mathsf{ror}(1, x) = \mathsf{H}(x)$ 
+(here $\mathsf{H}$ is chosen uniformly at random from all the functions 
+from $D$ to $R$\footnote{To efficiently simulate access to a uniformly random function $\mathsf{H}$ from $D$ to $R$, 
+one may think of a process in which the adversary's queries to $\mathcal{O}_\mathsf{ror}(1, \cdot)$ 
+are ``lazily'' answered with independently and randomly chosen elements in $R$, 
+while keeping track of the answers so that queries made repeatedly are answered consistently.}). 
+Note that $\mathcal{A}$ can adaptively access the oracle $\mathcal{O}_\mathsf{ror}(b, \cdot)$ polynomial many times.
+We say that $F$ is pseudorandom if for any PPT adversary its advantage function 
+$\AdvA$ is negligible in $\lambda$. We refer to such security as full PRF security. 
+\end{trivlist}
+\end{definition}
+
+Sometimes the full PRF security is not needed and it is sufficient 
+if the function cannot be distinguished from a uniform random one when challenged on random inputs. 
+The formalization of such relaxed requirement is \emph{weak pseudorandomness}, 
+which is defined the same way as pseudorandomness except that the inputs of 
+oracle $\mathcal{O}_\mathsf{ror}(b, \cdot)$ are uniformly chosen from $D$ by the challenger
+instead of adversarially chosen by $\mathcal{A}$. 
+PRFs that satisfy weak pseudorandomness are referred to as \emph{weak PRFs}.     
+
+
+\begin{trivlist}
+\item \textbf{Composable.} For a family of keyed function $F$, $F$ is 2-composable if $R \subseteq D$, 
+    namely, for any $k_1, k_2 \in K$, the function $F_{k_1}(F_{k_2}(\cdot))$ is well-defined. 
+    In this work, we are interested in a special case namely $R = D$. 
+    %From now on, we will assume $R = D$ for simplicity.   
+
+\item \textbf{Commutative.} For a family of composable keyed function, we say it is commutative if:  
+\begin{gather*}
+    \forall k_1, k_2 \in K, \forall x \in X: F_{k_1}(F_{k_2}(x)) = F_{k_2}(F_{k_1}(x))
+\end{gather*}
+\end{trivlist}
+
+It is easy to see that the standard pseudorandomness denies commutative property. 
+Consider the following attack against the standard pseudorandomness of $F_k$ as below: 
+the adversary $\mathcal{A}$ picks $k' \sample K$, $x \sample D$, 
+and then queries the real-or-random oracle at point $F_{k'}(x)$ and point $x$ respectively, 
+receiving back responses $y'$ and $y$. $\mathcal{A}$ then outputs `1' iff $F_{k'}(y) = y'$. 
+Clearly, $\mathcal{A}$ breaks the pseudorandomness with advantage $1/2 - \mathsf{negl}(\lambda)$.
+Provided commutative property exists, the best security we can expect is weak pseudorandomness. 
+Looking ahead, weak pseudorandomness and commutative property may co-exist based on some well-studied assumptions. 
+
+\begin{definition}[Commutative Weak PRF]
+Let $F$ be a family of keyed functions $K \times D \rightarrow D$.
+$F$ is call commutative weak PRF if it satisfies weak pseudorandomness and commutative property simultaneously.   
+\end{definition}
+
+\begin{trivlist}
+\item \textbf{Further generalization.} Instead of sticking to one family of keyed functions, 
+    commutative property can be defined over two families of keyed functions.   
+    Let $F$ be a family of weak PRF $K \times D \rightarrow D$, 
+    $G$ be a family of weak PRF $S \times D \rightarrow D$. If the following equation holds, 
+\begin{gather*}
+\forall k \in K, s \in S, \forall x \in X: F_k(G_s(x)) = G_s(F_k(x)) 
+\end{gather*}
+we say $(F, G)$ is a tuple of commutative weak PRF.  
+\end{trivlist}
+
+We note that our notion if commutative weak PRF is similar to but strictly weaker than a previous notion 
+called commutative encryption~\cite{AES-SIGMOD-2003}. 
+The difference is that cwPRF neither require $F_k$ be a permutation nor $F_k^{-1}$ be efficiently computable. 
+
+\subsection{Instantiations of Commutative Weak PRF}
+We present two instantiations of commutative weak PRF. 
+The first is built from the well-studied DDH assumption. 
+The second is built from weak pseudorandom effective group actions (EGA), 
+which in turn can be realized from the CSI-DDH assumption~\cite{KGV-SAC-2020}.  
+
+\begin{trivlist}
+\item \textbf{Construction from DDH.} We build a concrete commutative weak PRF from the DDH assumption. 
+\begin{itemize}
+\item $\mathsf{Setup}(1^\lambda)$: runs $\mathsf{GroupGen}(1^\lambda) \rightarrow (\mathbb{G}, g, p)$, 
+    outputs $pp = (\mathbb{G}, g, p)$. 
+
+\item $\mathsf{KeyGen}(pp)$: outputs $k \sample \mathbb{Z}_p$. 
+    Each $k$ defines a function from $\mathbb{G}$ to $\mathbb{G}$, 
+    which takes $x \in \mathbb{G}$ as input and outputs $x^k$. 
+\end{itemize}
+It is straightforward to verify that $F$ is commutative. 
+The following lemma establishes its pseudorandomness based on the DDH assumption. 
+
+\begin{lemma}
+The above construction is weak pseudorandom assuming the hardness of the DDH problem.
+\end{lemma} 
+
+\begin{proof}
+Towards a tight security reduction, 
+we utilize the random self-reducibility of the DDH problem~\cite{NR-FOCS-1995}. 
+Let $\mathcal{B}$ be an algorithm against the DDH assumption.  
+Given a DDH challenge instance $(g, g^a, g^b, g^c)$ over cyclic group $\mathbb{G} = \langle g \rangle$ of prime order $p$, 
+$\mathcal{B}$ interacts with an adversary $\mathcal{A}$
+in the weak pseudorandom experiment, with the aim to determine if $c = ab \bmod p$ or not. 
+
+\begin{trivlist}
+\item \underline{Setup:} $\mathcal{B}$ sends $pp = (\mathbb{G}, g, p)$ to $\mathcal{A}$. 
+    $\mathcal{B}$ implicitly set $a$ as the key of PRF. 
+
+\item \underline{Real-or-random query:} Upon receiving the $i$-th query to oracle $\mathcal{O}_\mathsf{ror}$, 
+    $\mathcal{B}$ picks $d_i, e_i \sample \mathbb{Z}_p$, 
+    sets the $i$-th random input $x_i := (g^b)^{d_i} \cdot g^{e_i}$, 
+    computes $y_i = g^{cd_i+ae_i}$, then sends $(x_i, y_i)$ to $\mathcal{A}$.
+
+\item \underline{Guess:} $\mathcal{A}$ makes a guess $\beta \in \{0,1\}$, 
+    where `0' indicates real mode and `1' indicates random mode. 
+    $\mathcal{B}$ forwards $\beta$ to its own challenger.    
+\end{trivlist}
+
+Clearly, if $c = ab \bmod q$ then $\mathcal{B}$ simulates the real mode perfectly, 
+else $\mathcal{B}$ simulates the random mode perfectly. 
+Thereby, $\mathcal{B}$ breaks the DDH assumption with the same advantage as 
+$\mathcal{A}$ breaks the pseduorandomness of $F$. 
+\end{proof}
+
+\item \textbf{Construction from EGA.} We build cwPRF from weak pseudorandom EGA~\cite{AFMP-ASIACRYPT-2020} as below. 
+\begin{itemize}
+\item $\mathsf{Setup}(1^\lambda)$: generate $pp$ that describes an effective group action $(\mathbb{G}, X, \star)$. 
+\item $\mathsf{KeyGen}(pp)$: picks a random group element $g$ from $\mathbb{G}$ as key. 
+    Each $g$ defines a function from $X$ to $X$, which takes $x \in X$ as input and outputs $g \star x$.  
+\end{itemize}
+It is straightforward to verify that when $\mathbb{G}$ is an abelien group, 
+the above construction constitutes cwPRF. 
+\end{trivlist}
+
+\section{Multi-query RPMT from Commutative Weak PRF}
+In Figure~\ref{fig:RPMT-from-cwPRF}, 
+we show how to build mqRPMT from cwPRF $F: K \times D \rightarrow D$ 
+and cryptographic hash function $\mathsf{H}: \{0,1\}^\ell \rightarrow D$. 
+
+\begin{figure}[!hbtp]
+\begin{framed}
+\begin{minipage}[center]{\textwidth}
+\begin{trivlist}
+\item \textbf{Parameters:} 
+\begin{itemize}
+    \item Common input: $F: K \times D \rightarrow D$, hash function $\mathsf{H}: \{0,1\}^\ell \rightarrow D$. 
+
+    \item Input of server $P_1$: $Y = \{y_1, \dots, y_n\} \subseteq \{0,1\}^\ell$.
+
+    \item Input of client $P_2$: $X = \{x_1, \dots, x_n\} \subseteq \{0,1\}^\ell$.
+\end{itemize}
+
+\item \textbf{Protocol:}
+
+\begin{enumerate}
+\item $P_1$ picks $k_1 \sample K$, 
+    then sends $\{F_{k_1}(\mathsf{H}(y_1)), \dots, F_{k_1}(\mathsf{H}(y_n))\}$ to $P_2$. 
+
+\item $P_2$ picks $k_2 \sample K$, 
+    computes and sends $\{F_{k_2}(\mathsf{H}(x_1)), \dots, F_{k_2}(\mathsf{H}(x_n))\}$ to $P_1$; 
+    then computes $\{F_{k_2}(F_{k_1}(\mathsf{H}(y_1)), \dots, F_{k_2}(F_{k_1}(\mathsf{H}(y_n))\}$, 
+    sends its permutation or Bloom filter $\Gamma$ to $P_1$; 
+
+\item $P_1$ computes $\{F_{k_1}(F_{k_2}(\mathsf{H}(x_1)), \dots, F_{k_2}(F_{k_1}(\mathsf{H}(x_n))\}$, 
+    then sets $e_i = 1$ iff $F_{k_1}(F_{k_2}(\mathsf{H}(x_i))) \in \Gamma$.   
+\end{enumerate}
+\end{trivlist}
+\end{minipage}
+\end{framed}
+\caption{Multi-query RPMT from commutative weak PRF}\label{fig:RPMT-from-cwPRF}
+\end{figure} 
+
+
+\begin{center}
+\begin{tikzpicture}
+\node[textnode, name=common-input] {$F: K \times D \rightarrow D$, $\mathsf{H}: \{0,1\}^\ell \rightarrow D$};
+\node[textnode, name=P1, below of = common-input, xshift=-14em, yshift=-4em] {$P_1$ (server)};
+\node[textnode, above of = P1, yshift=2em] {$Y = (y_1, \dots, y_n)$};  
+\node[textnode, name=P2, below of = common-input, xshift=14em, yshift=-4em] {$P_2$ (client)}; 
+\node[textnode, above of = P2, yshift=2em] {$X = (x_1, \dots, x_n)$};  
+
+\node[textnode, name = k1, below of = P1, yshift=-3em] {$k_1 \sample K$};
+\draw ($(P1.east)+(3em, -3em)$) edge[->] node[above] {$\{F_{k_1}(\mathsf{H}(y_i))\}_{i \in [n]}$} 
+      ($(P2.west)+(-3em, -3em)$);  
+
+\node[textnode, name = k2, below of = P2, yshift=-6em] {$k_2 \sample K$};
+\draw ($(P2.west)+(-3em, -6em)$) edge[->] node[above] {$\{F_{k_2}(\mathsf{H}(x_i))\}_{i \in [n]}$} 
+                                          node[below] {$\Gamma \leftarrow \Pi(\{F_{k_2}(F_{k_1}(\mathsf{H}(y_i)\}_{i \in [n]})$
+                                          \\\blue{$\Gamma \leftarrow \mathsf{Bloom}(\{F_{k_2}(F_{k_1}(\mathsf{H}(y_i)\}_{i \in [n]})$}} 
+                                          ($(P1.east)+(3em, -6em)$);
+
+\node[textnode, name = test, below of = P1, yshift=-6em] {set $e_i = 1$ iff \\ $F_{k_1}(F_{k_2}(\mathsf{H}(x_i))) \in \Gamma$};   
+\end{tikzpicture}
+\end{center}
+
+\begin{trivlist}
+\item \textbf{Correctness.} The above protocol is correct except the case $E$ that 
+    $F_{k_1}(F_{k_2}(\mathsf{H}(x))) = F_{k_1}(F_{k_2}(\mathsf{H}(y)))$ for some $x \neq y$ occurs. 
+    We further divide $E$ to $E_0$ and $E_1$. 
+    $E_0$ denotes the case that $\mathsf{H}(x) = \mathsf{H}(y)$. 
+    $E_1$ denotes the case that $\mathsf{H}(x) \neq \mathsf{H}(y)$ 
+    but $F_{k_1}(F_{k_2}(\mathsf{H}(x))) = F_{k_1}(F_{k_2}(\mathsf{H}(y)))$, 
+    which can further be divided into sub-cases $E_{10}$ — $F_{k_2}(\mathsf{H}(x)) = F_{k_2}(\mathsf{H}(y))$ 
+    and $E_{11}$ — $F_{k_2}(\mathsf{H}(x)) \neq F_{k_2}(\mathsf{H}(y))$ but 
+    $F_{k_1}(F_{k_2}(\mathsf{H}(x))) = F_{k_1}(F_{k_2}(\mathsf{H}(y)))$. 
+    By the collision resistance of $\mathsf{H}$, we have $\Pr[E_0] = 2^{-\sigma}$. 
+    By the weak pseudorandomness of $F$, we have $\Pr[E_{10}] = \Pr[E_{11}] = 2^{-\ell}$. 
+    Therefore, we have $\Pr[E] \leq \Pr[E_0] + \Pr[E_{10}] + \Pr[E_{11}] = 2^{-\sigma}+2^{-\ell+1}$. 
+
+\end{trivlist} 
+
+\begin{theorem}
+The above multi-query RPMT protocol is secure in the semi-honest model assuming $\mathsf{H}$ is a random oracle 
+and $F$ is a family of cwPRF.
+\end{theorem}
+
+\begin{proof}
+We exhibit simulators $\mathsf{Sim}_{P_1}$ and $\mathsf{Sim}_{P_2}$ for simulating corrupt $P_1$ and $P_2$ respectively, 
+and argue the indistinguishability of the produced transcript from the real execution. Let $|X \cap Y| = m$. 
+
+\begin{trivlist}
+\item \underline{Corrupt client:} $\mathsf{Sim}_{P_2}$ simulates the view of corrupt client $P_2$, 
+    which consists of $P_2$'s randomness, input, output and received messages.
+ 
+    We argue the output of $\mathsf{Sim}_{P_2}$ is indistinguishable from the real execution. 
+    For this, we formally show the simulation by proceeding the sequence of hybrid transcripts, 
+    where $T_0$ is the real view of $P_2$, and $T_1$ is the output of $\mathsf{Sim}_{P_2}$. 
+
+\item $\text{Hybrid}_0$: $\mathsf{Sim}_{P_2}$ chooses the randomness for $P_1$ (i.e., picks $k_1 \sample K$), 
+    and simulates with the knowledge of $Y$. 
+\begin{itemize}
+    \item RO queries: for random oracle query $\langle z_i \rangle$, 
+        picks $\alpha_i \sample D$ and set $\mathsf{H}(z_i):=\alpha_i$. 
+
+    \item Let $\beta_i = \mathsf{H}(y_i)$ for each $y_i \in Y$. 
+        $\mathsf{Sim}_{P_2}$ outputs $(F_{k_1}(\beta_1), \dots, F_{k_1}(\beta_n))$.     
+\end{itemize}
+Clearly, $\mathsf{Sim}_{P_2}$'s simulation is identical to the real view of $P_2$. 
+
+\begin{center}
+\begin{tikzpicture}
+\node[textnode, name = intersection] {$X \cap Y$}; 
+\node[ellipsenode, name = Y, left of =intersection, xshift=-1.5em, 
+    minimum height = 3em, minimum width=6em, label={[xshift=-1em]$Y$}] {};
+\node[ellipsenode, name = X, left of =intersection, xshift=1.5em, 
+    minimum height = 3em, minimum width=6em, label={[xshift=1em]$X$}] {}; 
+
+\node[textnode, right of = X, xshift=10em] {$\mathsf{H}(z_i): = \alpha_i \sample D$};
+\end{tikzpicture}
+\end{center}
+
+\item $\text{Hybrid}_1$: $\mathsf{Sim}_{P_2}$ does not choose the randomness for $P_1$, 
+    and simulates without the knowledge of $Y$. 
+    It simulates the RO queries the same way as in $\text{Hybrid}_0$, 
+    and only changes the simulation of $P_1$'s message.  
+\begin{itemize}
+    \item $\mathsf{Sim}_{P_2}$ outputs $(s_1, \dots, s_n)$ where $s_i \sample D$.       
+\end{itemize}
+We argue that the view in $\text{Hybrid}_0$ and $\text{Hybrid}_1$ are computationally indistinguishable. 
+More precisely, a PPT adversary $\mathcal{A}$ \red{(with knowledge of $X$ and $Y$)} 
+against cwPRF (with secret key $k$) is given $n$ tuples $(\beta_i, s_i)$ where $\beta_i \sample D$, 
+and is asked to distinguish if $s_i = F_k(\beta_i)$ or $s_i$ are random values. 
+$\mathcal{A}$ implicitly sets $P_1$'s randomness $k_1:=k$. 
+\begin{itemize}
+    \item RO queries: for random oracle query $\langle z_i \rangle$ where $z_i \notin Y$,  
+        picks $\alpha_i \sample D$ and set $\mathsf{H}(z_i):=\alpha_i$; 
+        for random oracle query $\langle z_i \rangle$ where $z_i \in Y$, 
+        sets $\mathsf{H}(z_i):=\beta_i$.  
+
+    \item $\mathcal{A}$ outputs $(s_1, \dots, s_n)$.      
+\end{itemize}
+
+If $s_i = F_k(\beta_i)$ for $i \in [n]$, then $\mathcal{A}$'s simulation is identical to $\text{Hybrid}_0$. 
+If $s_i$ are random values, then $\mathcal{A}$'s simulation is identical to $\text{Hybrid}_1$. 
+\end{trivlist}
+
+\begin{trivlist}
+\item \underline{Corrupt server:} $\mathsf{Sim}_{P_1}$ simulates the view of corrupt server $P_1$, 
+    which consists of $P_1$'s randomness, input, output and received messages.
+ 
+    We argue the output of $\mathsf{Sim}_{P_1}$ is indistinguishable from the real execution. 
+    For this, we formally show the simulation by proceeding the sequence of hybrid transcripts, 
+    where $T_0$ is the real view of $P_1$, and $T_1$ is the output of $\mathsf{Sim}_{P_1}$. 
+
+\item $\text{Hybrid}_0$: $\mathsf{Sim}_{P_1}$ chooses the randomness for $P_2$ (i.e., picks $k_2 \sample K$), 
+    and simulates with the knowledge of $X$. 
+\begin{itemize}
+    \item RO queries: for random oracle query $\langle z_i \rangle$, 
+        picks $\alpha_i \sample D$ and sets $\mathsf{H}(z_i):=\alpha_i$. 
+
+    \item $\mathsf{Sim}_{P_1}$ outputs 
+        $\{F_{k_2}(\mathsf{H}(x_i))\}_{x_i \in X}$ 
+        and $\Gamma \leftarrow \Pi(\{F_{k_2}(F_{k_1}(\mathsf{H}(y_i))\}_{y_i \in Y})$.      
+\end{itemize}
+Clearly, $\mathsf{Sim}_{P_1}$'s simulation is identical to the real view of $P_1$. 
+
+\begin{center}
+\begin{tikzpicture}
+\node[textnode, name = intersection] {$X \cap Y$}; 
+\node[ellipsenode, name = Y, left of =intersection, xshift=-1.5em, 
+    minimum height = 3em, minimum width=6em, label={[xshift=-1em]$Y$}] {};
+\node[ellipsenode, name = X, left of =intersection, xshift=1.5em, 
+    minimum height = 3em, minimum width=6em, label={[xshift=1em]$X$}] {}; 
+
+\node[textnode, right of = X, xshift=10em] {$\mathsf{H}(z_i): = \alpha_i \sample D$};
+\end{tikzpicture}
+\end{center}
+
+\item $\text{Hybrid}_1$: $\mathsf{Sim}_{P_1}$ does not choose randomness for $P_1$, 
+    and simulates without the knowledge of $X$, 
+    but only with the knowledge of $\vec{e} = (e_1, \dots, e_n)$ where $e_i = 1$ iff $x_i \in Y$.  
+    Let the Hamming weight of $\vec{e}$ be $m$. It simulates the RO queries the same way as in $\text{Hybrid}_0$, 
+    and changes it simulation of $P_2$'s message. 
+\begin{itemize}
+    \item $\mathsf{Sim}_{P_1}$ picks $v_i \sample D$ for $i \in [n]$ 
+        (associated with $F_{k_2}(\mathsf{H}(x_i))$ where $x_i \in X$), 
+        outputs $\{v_i\}_{i \in [n]}$; 
+        picks $t_j \sample D$ for $j \in [n-m]$ (associated with $F_{k_2}(\mathsf{H}(y_j))$ where $y_j \in Y - X \cap Y$),  
+        outputs the permutation of $(\{F_{k_1}(v_i)\}_{e_i = 1}, \{F_{k_1}(t_j)\}_{j \in [n-m]})$.                
+\end{itemize}
+
+We argue that the view in $\text{Hybrid}_0$ and $\text{Hybrid}_1$ are computationally indistinguishable. 
+More precisely, a PPT adversary $\mathcal{A}$ \red{(with knowledge of $X$ and $Y$)} against cwPRF 
+are given $n+m$ tuples $(\alpha_t, s_t)$ where $\alpha_t \sample D$, 
+and is asked to determine if $s_t = F_{k}(\alpha_t)$ or random values. 
+$\mathcal{A}$ implicitly sets $P_2$'s randomness $k_2:=k$, picks $k_1 \sample K$. 
+\begin{itemize}
+    \item RO queries: for $z_i \notin X \cup Y$, picks $\beta_i \sample D$ and returns $\mathsf{H}(z_i):=\beta_i$; 
+        for $z_i \in X \cup Y$, returns $\mathsf{H}(z_i) := \alpha_i$. 
+
+    \item $\mathcal{A}$ picks out $s_t$ such that $\mathsf{H}(z_t):=\alpha_t$ for $z_t = x_i \in X$ 
+        to form $\{v_i\}_{i \in [n]}$, 
+        picks out $s_t$ such that $\mathsf{H}(z_t):=\alpha_t$ for $z_t = x_i \in X \backslash Y$ 
+        to form $\{w_j\}_{j \in [n-m]}$. 
+        Finally, $\mathcal{A}$ outputs $\{v_i\}_{i \in [n]}$ and the permutation or Bloom filter of 
+        $(\{F_{k_1}(v_i)\}_{x_i \in X \cap Y}, \{F_{k_1}(w_j)\}_{j \in [n-m]}$.               
+\end{itemize}
+
+If $s_i$ are function values, then the simulation is identical to $\text{Hybrid}_0$, 
+else it is identical to $\text{Hybrid}_1$. 
+\end{trivlist}
+This proves the theorem. 
+\end{proof}
+
+\begin{remark}
+In the above construction of mqRPMT, $P_1$'s message is of the form $F_{k_1}(y_i)$, 
+part of $P_2$'s message is of the form $F_{k_2}(x_i)$. 
+The common theme is to apply $\mathsf{H}$ and $F_k$ in a cascade way, 
+yielding a composite function $F_k \circ \mathsf{H}: \{0,1\}^* \rightarrow D$.   
+By leveraging the programmability of $\mathsf{H}$, 
+the composite function $F_k \circ \mathsf{H}$ is family of PRF in the random oracle model. 
+In essence, random oracle amplifies weak pseudorandomness to standard pseudorandomness.  
+\end{remark}
+
+
+\section{mqRPMT from mqPMT}
+
+\subsection{Private Membership Test}
+Private membership test (PMT) protocol~\cite{PSZ-USENIX-2014} is a two-party protocol in which the client with input $x$ 
+learns whether or not its item is in the input set $Y$ of the server. 
+PMT can be viewed as a special case of private keyword search protocol~\cite{FIPR-TCC-2005} 
+by setting the payload as any indication string.
+We consider three-message PMT as below, which we refer to Sigma-PMT hereafter. Sigma-PMT proceeds via following pattern.
+\begin{enumerate}
+\item Server $P_1$ sends the first round message $a$ to sender $P_2$, 
+    which is best interpreted as an encoding of $Y$. 
+\item Sender $P_2$ sends query $q$ w.r.t. to his item $x$.
+\item Server $P_1$ responds with $t$.
+\end{enumerate}
+
+After receiving $t$, client $P_2$ can decide if $x \in Y$ by running $\mathsf{Test}(a, x, q, t)$.
+The basic notion of Sigma PMT allows the client ($P_2$) to test for a single item. 
+While this procedure can be repeated several times, 
+one may seed more efficient protocol allowing the client to test $n$ items at a reduced cost. 
+We consider such an extension which we refer to as amortized Sigma-PMT, which satisfies the following two properties:
+
+\begin{itemize}
+\item \textbf{Reusable:} the first round message is performed by the server ($P_1$) once and for all
+\item \textbf{Non-adaptive:} each test query $q_i$ is independent of previous messages
+\end{itemize}
+Clearly, amortized Sigma-PMT admits parallelization, hence the round complexity is unchanged even when
+handling multiple items. Amortized Sigma-PMT may enjoy an additional property:
+\begin{itemize}
+\item \textbf{Stateless:} the test algorithm can work in a memoryless way, namely, 
+    for any xi and associated $(q_i, t_i)$, we have: $\mathsf{Test}(a, x_i, q_i, t_i) = \mathsf{Test}(a, t_i)$.
+\end{itemize}
+We depict amortized Sigma-PMT that supports stateless testing in Figure~\ref{figure:sigma-PMT}.
+
+\begin{figure}[!hbth]
+\begin{framed}
+\begin{minipage}[center]{\textwidth}
+\begin{center}
+\begin{tikzpicture}
+    \node [textnode, name=P1] {server\\$P_1(Y)$}; 
+    \node [textnode, name=P2, right of =P1, xshift=16em] {client\\$P_2(x)$}; 
+  
+    \draw ($(P1.east)+(2em, -3em)$) edge[->] node [above]{$a$} ($(P2.west)+(-2em, -3em)$);   
+
+    \draw ($(P2.west)+(-2em, -6em)$) edge[->] node [above] {$q$} ($(P1.east)+(2em, -6em)$); 
+
+    \draw ($(P1.east)+(2em, -9em)$) edge[->] node [above]{$z$} ($(P2.west)+(-2em, -9em)$); 
+
+    \node [textnode, name=test, below of=P2, xshift=2em, yshift=-9em] {$e \leftarrow \mathsf{Test}(a, x, q, z)$}; 
+\end{tikzpicture}
+\end{center}
+\end{minipage}
+\end{framed}
+\caption{Sigma PMT}\label{figure:sigma-PMT}
+\end{figure}
+
+
+\begin{figure}[!hbth]
+\begin{framed}
+\begin{minipage}[center]{\textwidth}
+\begin{center}
+\begin{tikzpicture}
+    \node [textnode, name=P1] {server\\$P_1(Y)$}; 
+    \node [textnode, name=P2, right of =P1, xshift=16em] {client\\$P_2(X)$}; 
+  
+    \draw ($(P1.east)+(2em, -3em)$) edge[->] node [above]{$a$} ($(P2.west)+(-2em, -3em)$);   
+
+    \draw ($(P2.west)+(-2em, -6em)$) edge[->] node [above] {$\vec{q}= \{q_1, \dots, q_{n_2}\}$} ($(P1.east)+(2em, -6em)$); 
+
+    \draw ($(P1.east)+(2em, -9em)$) edge[->] node [above]{$\vec{z} = \{z_1, \dots, z_{n_2}\}$} ($(P2.west)+(-2em, -9em)$); 
+
+    \node [textnode, name=test, below of=P2, xshift=2em, yshift=-9em] {$\vec{e} \leftarrow \mathsf{Test}(a, \vec{z})$}; 
+\end{tikzpicture}
+\end{center}
+\end{minipage}
+\end{framed}
+\caption{mqPMT from Amortized Sigma PMT Supporting Stateless Test}\label{figure:mqPMT-from-sigma-PMT}
+\end{figure}
+
+\subsection{Connection to mqRPMT}
+
+\begin{figure}[!hbth]
+\begin{framed}
+\begin{minipage}[center]{\textwidth}
+\begin{center}
+\begin{tikzpicture}
+    \node [textnode, name=P1] {server\\$P_1(Y)$}; 
+    \node [textnode, name=P2, right of =P1, xshift=16em] {client\\$P_2(X)$}; 
+  
+    \draw ($(P1.east)+(2em, -3em)$) edge[->] node [above]{$a$} ($(P2.west)+(-2em, -3em)$);   
+
+    \draw ($(P2.west)+(-2em, -6em)$) edge[->] node [above] {$\vec{q}= \{q_1, \dots, q_{n_2}\}$} ($(P1.east)+(2em, -6em)$); 
+
+    \node [textnode, name=permutation, below of=P1, xshift=-4em, yshift=-9em] 
+        {pick a random permutation \\$\pi: [n_2] \rightarrow [n_2]$}; 
+
+    \draw ($(P1.east)+(2em, -9em)$) edge[->] node [above]{$\vec{z}^* = \{z_{\pi(1)}, \dots, z_{\pi(n_2)}\}$} ($(P2.west)+(-2em, -9em)$); 
+
+    \node [textnode, name=test, below of=P2, xshift=2em, yshift=-9em] {$\vec{e}^* \leftarrow \mathsf{Test}(a, \vec{z}^*)$}; 
+
+    \draw ($(P2.west)+(-2em, -12em)$) edge[->] node [above] {$\vec{e}^*$} ($(P1.east)+(2em, -12em)$); 
+
+
+    \node [textnode, name=recover, below of=P1, xshift=-4em, yshift=-12em] 
+        {$\vec{e} = \{e^*_{\pi^{-1}(i)}\}_{i=1}^{n_2}$}; 
+\end{tikzpicture}
+\end{center}
+\end{minipage}
+\end{framed}
+\caption{mqRPMT from mqPMT}\label{figure:mqPMT-from-mqPMT}
+\end{figure}
+
+\begin{theorem}
+The above mqRPMT$^*$ protocol is secure in the semi-honest model assuming the semi-honest security of the starting mqPMT protocol.  
+\end{theorem}
+
+\begin{proof}
+We exhibit simulators $\mathsf{Sim}_{P_1}$ and $\mathsf{Sim}_{P_2}$ for simulating corrupt server $P_1$ 
+and corrupt client $P_2$ respectively. Let $|X \cap Y| = m$. 
+
+\begin{trivlist}
+\item \underline{Corrupt client:} $\mathsf{Sim}_{P_2}$ simulates the view of corrupt client $P_2$, 
+which consists of $P_2$'s randomness, input, output and received messages.
+
+We argue that the output of $\mathsf{Sim}_{P_2}$ is indistinguishable from the real execution. 
+For this, we formally show the simulation by proceeding the sequence of hybrid transcripts, 
+where $T_0$ is the real view of $P_2$, and $T_1$ is the output of $\mathsf{Sim}_{P_2}$. 
+\item $\mathsf{Hybrid}_0$: $\mathsf{Sim}_{P_2}$ chooses the randomness $r$ for $P_1$, 
+    and simulates with the knowledge of $Y$. Clearly, $\mathsf{Sim}_{P_2}$'s simulation is identical to the real view of $P_2$.    
+
+\item $\mathsf{Hybrid}_1$: $\mathsf{Sim}_{P_2}$ does not choose the randomness for $P_1$, 
+    and simulates without the knowledge of $Y$. 
+    Instead, it invokes the mqPMT's simulator for $P_2$ on his private input $X$ and output $\vec{e}^*$ 
+    to generate $(a, \vec{z}^*)$, outputs $(a, \vec{z}^*)$.  
+
+\item \blue{$\mathsf{Hybrid}_2$: $\mathsf{Sim}_{P_2}$ first generate a random indication vector $\vec{t}^*$ 
+    with Hamming weight $m = |X \cap Y|$, then invokes the mqPMT's simulator for $P_2$ on his private input $X$ 
+    and output $\vec{t}^*$ to generate $(a, \vec{z}^*)$, outputs $(a, \vec{z}^*)$.}  
+
+\item Clearly, the view in $\mathsf{Hybrid}_0$ and $\mathsf{Hybrid}_1$ are computationally indistinguishable 
+    based on the semi-honest security of mqPMT on $P_2$'s side. 
+    Besides, since both $e^*$ and $t^*$ follow the same distribution, 
+    thus the view in $\mathsf{Hybrid}_1$ and $\mathsf{Hybrid}_2$ are identical. 
+    In conclusion, the view in $\mathsf{Hybrid}_0$ and $\mathsf{Hybrid}_2$ are computationally indistinguishable. 
+
+
+\item \underline{Corrupt server:} $\mathsf{Sim}_{P_1}$ simulates the view of corrupt server $P_1$, 
+which consists of $P_1$'s randomness, input, output and received messages.
+
+We argue that the output of $\mathsf{Sim}_{P_1}$ is indistinguishable from the real execution. 
+For this, we formally show the simulation by proceeding the sequence of hybrid transcripts, 
+where $T_0$ is the real view of $P_1$, and $T_1$ is the output of $\mathsf{Sim}_{P_1}$. 
+
+\item $\mathsf{Hybrid}_0$: $\mathsf{Sim}_{P_1}$ chooses the randomness $r$ for $P_2$, 
+    and simulates with the knowledge of $X$. Clearly, $\mathsf{Sim}_{P_1}$'s simulation is identical to the real view of $P_1$.    
+
+\item $\mathsf{Hybrid}_1$: $\mathsf{Sim}_{P_1}$ does not choose the randomness for $P_2$, 
+    and simulates without the knowledge of $X$. Instead, it first invokes the mqPMT's simulator for $P_2$ 
+    on his input $Y$ to generate $\vec{q}$, then picks a random permutation $\pi$, computes $\vec{e}^* = \pi(\vec{e})$,  
+    outputs $(\vec{q}, \pi(\vec{z}))$.  
+
+\item Clearly, the view in $\mathsf{Hybrid}_0$ and $\mathsf{Hybrid}_1$ are computationally indistinguishable 
+    based on the semi-honest security of mqPMT on $P_1$'s side. 
+\end{trivlist} 
+This proves the theorem. 
+\end{proof}
+
+
+
+\section{Applications of Multi-Query RPMT}
+\begin{figure}[!hbtp]
+\begin{framed}
+\begin{minipage}[center]{\textwidth}
+\begin{trivlist}
+\item \textbf{Parameters:} 
+\begin{itemize}
+    \item Input of receiver $P_1$: $Y = \{y_1, \dots, y_{n_1}\} \subseteq \{0,1\}^\ell$.
+
+    \item Input of sender $P_2$: $X = \{x_1, \dots, x_{n_2}\} \subseteq \{0,1\}^\ell$ 
+        and $V = \{v_1, \dots, v_{n_2}\}$.
+\end{itemize}
+
+\item \textbf{Protocol:}
+
+\begin{enumerate}
+\item $P_1$ (playing the role of server) with $Y$ and $P_2$ (playing the role of receiver) with $X$
+    invoke $\FuncMQRPMT$. $P_1$ obtains an indication bit vector $\vec{e} = (e_1, \dots, e_{n_2})$. 
+    $P_2$ obtains nothing.  
+
+    \begin{itemize}
+        \item \textbf{cardinality:} $P_1$ learns the cardinality by calculating the Hamming weight of $\vec{e}$. 
+    \end{itemize}
+
+\item $P_1$ and $P_2$ invoke $n_2$ instances of OT via $\FuncOT$. 
+    $P_1$ uses $\vec{e}$ as the choice bits. 
+
+
+\begin{itemize}
+    \item \textbf{intersection:} $P_2$ uses $(\bot, x_i)$ as input to the $i$th OT. 
+        $P_1$ learns $\{x_i \mid e_i = 1\}_{i \in [n_2]} = X \cap Y$. 
+
+    \item \textbf{union:} $P_2$ uses $(x_i, \bot)$ as input to the $i$th OT. 
+        $P_1$ learns $\{x_i \mid e_i = 0\}_{i \in [n_2]} = X \slash Y$, and outputs $\{X \slash Y\} \cup Y = X \cup Y$. 
+
+    \item \textbf{intersection sum with cardinality:} $P_2$ randomly generate $r_i$ 
+        subject to the constraint $\sum_{i=1}^{n_2} r_i = 0$, then uses $(r_i, r_i + v_i)$ as input to the $i$th OT. 
+        $P_1$ learns $\{\sum_{i=1}^{n_2} v_i \mid e_i = 1\}_{i \in [n_2]} = X \cap Y$. 
+\end{itemize} 
+
+\end{enumerate}
+\end{trivlist}
+\end{minipage}
+\end{framed}
+\caption{PSO from mqRPMT}\label{fig:PSO-from-mqRPMT}
+\end{figure} 
+
+
+
+
+
+\section{Implementation}
+\begin{table}[H]
+\begin{center}
+\caption{The computation and communication complexity of PSU}
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+         & \multirow{2}*{Protocol} & Setting  & \multicolumn{3}{c|}{Set size $n$} \\
+                                              \cline{4-6} 
+         &                         & (LAN)   & $2^{12}$ & $2^{16}$ & $2^{20}$   \\
+\hline
+\multirow{3}*{Time (s)} & \multirow{3}*{Ours} & 1 Mbps     & & & \\
+                        \cline{3-6} 
+                        &                     & 10 Mbps    & & & \\
+                        \cline{3-6} 
+                        &                     & 100 Mbps   & & & \\
+                        \cline{3-6} 
+                        &                     & 68 Gbps    & 0.45 & 5.3 & 86.9 \\
+\hline
+Comm. (MB)              & Ours                &            & 0.47 & 7.4 & 117.6\\
+\hline
+
+    % confidential transaction &~& $(2 \log_2(\ell) + 20)|\mathbb{G}| + 10|\mathbb{Z}_p|$ &~&1310   &\qquad& 40 & ~ & 14\\
+    % \hline 
+    % \hline
+    % \multirow{2}*{auditing policies} &~& \multicolumn{3}{c}{proof size} &\qquad& \multicolumn{3}{c}{auditing cost (ms)}\\
+    %     \cline{2-4}  \cline{5-9} 
+    %     &~&~big-$\mathcal{O}$~ &~&~bytes~&\qquad& ~generation~ & ~ &~verify\\
+    % \hline
+    % limit policy &~& $(2 \log_2(\ell) + 4)|\mathbb{G}| + 5|\mathbb{Z}_p|$ &~&622   &\qquad& 21.5 & ~ & 7.5\\
+    % \hline
+    % rate policy &~& $2 |\mathbb{G}| + 1|\mathbb{Z}_p|$ &~&98   &\qquad& 0.55 & ~ & 0.69\\
+    % \hline
+    % open policy &~& $2 |\mathbb{G}| + 1|\mathbb{Z}_p|$ &~&98   &\qquad& 0.26 & ~ & 0.42\\
+    % \hline
+\end{tabular}{}\label{table:efficiency}
+\end{center}
+\begin{tablenotes}
+\item [a] Here
+\end{tablenotes}
+\end{table}
+
+and collect the benchmarks on a MacBook Pro with an 2.6GHz Intel CPU and 16GB of RAM
+
+          
 
 \bibliographystyle{alpha}
-\bibliography{\path/bib/mycrypto,reference}
+\bibliography{\path/bib/mycrypto}
 
+\appendix
 
-% \newpage
+\section{Missing Definitions}
+\subsection{Weak Pseudorandom EGA}
+We begin by recalling the definition of a group action. 
+\begin{definition}[Group Actions]
+A group $\mathbb{G}$ is said to \emph{act on} a set $X$ if there is a map $\star: \mathbb{G} \times X \rightarrow X$ 
+that satisfies the following two properties: 
+\begin{enumerate}
+    \item Identity: if $e$ is the identity element of $\mathbb{G}$, then for any $x \in X$, we have $e \star x = x$. 
+    \item Compatibility: for any $g, h \in \mathbb{G}$ and any $x \in X$, 
+        we have $(gh) \star x = g \star (h \star x)$. 
+\end{enumerate}
+\end{definition}
 
-% \appendix
-% \input{appendix}	
+From now on, we use the abbreviated notation $(\mathbb{G}, X, \star)$ to denote a group action. 
+We then define an effective group action (EGA)~\cite{AFMP-ASIACRYPT-2020} as follows. 
+\begin{definition}[Effective Group Actions]
+A group action $(\mathbb{G}, X, \star)$ is \emph{effective} a set $X$ if the following properties are satisfied:  
+\begin{enumerate}
+\item The group $\mathbb{G}$ is finite and there exist PPT algorithms for: 
+\begin{enumerate}
+    \item Membership testing, i.e., to decide if a given bit string represents a valid group element in $\mathbb{G}$. 
+    \item Equality testing, i.e., to decide if two bit strings represents the same group element in $\mathbb{G}$.
+    \item Sampling, i.e., to sample an element $g$ from a uniform (or statistically close to) distritution on $\mathbb{G}$.  
+    \item Operation, i.e., to compute $gh$ for any $g, h \in \mathbb{G}$. 
+    \item Inversion, i.e., to compute $g^{-1}$ for any $g \in \mathbb{G}$.
+\end{enumerate}
+
+\item The set $X$ is finite and there exist PPT algorithms for: 
+\begin{enumerate}
+    \item Membership testing, i.e., to decide if a bit string represents a valid set element. 
+
+    \item Unique representation, i.e., given any arbitrary set element $x \in X$, 
+        compute a string $\hat{x}$ that canonically represents $x$.
+\end{enumerate}
+
+\item There exists a distinguished element $x_0 \in X$, 
+    called the origin, such that its bit-string representation is known.
+
+\item There exists an efficient algorithm that given (some bit-string representations of) any $g \in \mathbb{G}$ 
+    and any $x \in X$, outputs $g \star x$.
+\end{enumerate} 
+\end{definition}
+
+\begin{definition}[Weak Pseudorandom EGA]
+There is no PPT adversary that can distinguish tuples of the form $(x_i, g \star x_i)$ 
+from $(x_i, u_i)$ where $g \leftarrow \mathbb{G}$ and each $x_i, u_i \leftarrow X$ are sampled uniformly at random.
+\end{definition}
+
 	
 \end{document}
+
+% \section{PSU from Commutative Weak PRFs}
+% \begin{figure}[!hbtp]
+% \begin{framed}
+% \begin{minipage}[center]{\textwidth}
+% \begin{trivlist}
+% \item \textbf{Parameters:} 
+% \begin{itemize}
+%     \item Common input: $F: K \times D \rightarrow D$, hash function $\mathsf{H}: \{0,1\}^* \rightarrow D$. 
+
+%     \item Input of sender $\mathcal{S}$: $X = \{x_1, \dots, x_n\}$.
+
+%     \item Input of receiver $\mathcal{R}$: $Y = \{y_1, \dots, y_n\}$. 
+% \end{itemize}
+
+% \item \textbf{Protocol:}
+
+% \begin{enumerate}
+% \item $\mathcal{R}$ picks $k_2 \sample K$, 
+%     then sends $\{F_{k_2}(\mathsf{H}(y_1)), \dots, F_{k_2}(\mathsf{H}(y_n))\}$ to $\mathcal{S}$. 
+
+% \item $\mathcal{S}$ picks $k_1 \sample K$, 
+%     computes and sends $\{F_{k_1}(\mathsf{H}(x_1)), \dots, F_{k_1}(\mathsf{H}(x_n))\}$ to $\mathcal{R}$; 
+%     then computes $\{F_{k_1}(F_{k_2}(\mathsf{H}(y_1)), \dots, F_{k_1}(F_{k_2}(\mathsf{H}(y_n))\}$, 
+%     sends its permutation $\Gamma$ to $\mathcal{R}$; 
+
+% \item $\mathcal{R}$ computes $\{F_{k_2}(F_{k_1}(\mathsf{H}(x_1)), \dots, F_{k_2}(F_{k_1}(\mathsf{H}(x_n))\}$, 
+%     then sets $v_i = 0$ iff the value is not in $\Gamma$. 
+
+% \item $\mathcal{R}$ with select vector $(v_1, \dots, v_n)$ and $\mathcal{S}$ 
+%     with input $\{(x_i, \bot)\}_{i \in [n]}$ engage in one-sided OT. 
+
+% \item $\mathcal{R}$ obtains $X - X \cap Y$, and thus obtains the union $X \cup Y$.  
+% \end{enumerate}
+% \end{trivlist}
+% \end{minipage}
+% \end{framed}
+% \caption{PSU from Commutative Weak PRFs}\label{fig:PSU-from-cwPRF}
+% \end{figure} 
+
+% \begin{trivlist}
+% \item \textbf{Correctness.} The above protocol is correct except the case $E$ that 
+%     $F_{k_1}(F_{k_2}(\mathsf{H}(x))) = F_{k_1}(F_{k_2}(\mathsf{H}(y)))$ for some $x \neq y$ occurs. 
+%     We further divide $E$ to $E_0$ and $E_1$. 
+%     $E_0$ denotes the case that $\mathsf{H}(x) = \mathsf{H}(y)$. 
+%     $E_1$ denotes the case that $\mathsf{H}(x) \neq \mathsf{H}(y)$ 
+%     but $F_{k_1}(F_{k_2}(\mathsf{H}(x))) = F_{k_1}(F_{k_2}(\mathsf{H}(y)))$, 
+%     which can further be divided into sub-cases $E_{10}$ — $F_{k_2}(\mathsf{H}(x)) = F_{k_2}(\mathsf{H}(y))$ 
+%     and $E_{11}$ — $F_{k_2}(\mathsf{H}(x)) \neq F_{k_2}(\mathsf{H}(y))$ but 
+%     $F_{k_1}(F_{k_2}(\mathsf{H}(x))) = F_{k_1}(F_{k_2}(\mathsf{H}(y)))$. 
+%     By the collision resistance of $\mathsf{H}$, we have $\Pr[E_0] = 2^{-\sigma}$. 
+%     By the weak pseudorandomness of $F$, we have $\Pr[E_{10}] = \Pr[E_{11}] = 2^{-\ell}$. 
+%     Therefore, we have $\Pr[E] \leq \Pr[E_0] + \Pr[E_{10}] + \Pr[E_{11}] = 2^{-\sigma}+2^{-\ell+1}$. 
+
+% \end{trivlist} 
+
+% \begin{theorem}
+% The above PSU protocol is secure in the semi-honest model assuming $\mathsf{H}$ is a random oracle 
+% and $F$ is a family of commutative weak PRFs.
+% \end{theorem}
+
+% \begin{proof}
+% We exhibit simulators $\SimR$ and $\SimS$ for simulating corrupt $\mathcal{R}$ and $\mathcal{S}$ respectively, 
+% and argue the indistinguishability of the produced transcript from the real execution. Let $|X \cap Y| = m$. 
+
+% \begin{trivlist}
+% \item \underline{Corrupt sender:} $\SimS$ simulates the view of corrupt $\mathcal{S}$, 
+%     which consists of $\mathcal{S}$'s randomness, input, output and received messages.
+ 
+%     We argue the output of $\SimS$ is indistinguishable from the real execution. 
+%     For this, we formally show the simulation by proceeding the sequence of hybrid transcripts, 
+%     where $T_0$ is the real view of $\mathcal{S}$, and $T_2$ is the output of $\SimS$. 
+
+% \item $\text{Hybrid}_0$: $\SimS$ simulates with the knowledge of $Y$. 
+% \begin{itemize}
+%     \item $\SimS$ chooses the randomness for $\mathcal{R}$, i.e., picks $k_2 \sample K$.
+    
+%     \item RO queries: for random oracle query $\langle z \rangle$, 
+%         picks $h \sample D$ and set $\mathsf{H}(z):=h$. 
+
+%     \item Let $h_i = \mathsf{H}(y_i)$ for each $y_i \in Y$. $\SimS$ outputs $(F_{k_2}(h_1), \dots, F_{k_2}(h_n))$.     
+% \end{itemize}
+% Clearly, $\SimS$'s simulation is identical to the real view. 
+
+% \begin{center}
+% \begin{tikzpicture}
+% \node[textnode, name = intersection] {$X \cap Y$}; 
+% \node[ellipsenode, name = X, left of =intersection, xshift=-1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=-1em]$X$}] {};
+% \node[ellipsenode, name = Y, left of =intersection, xshift=1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=1em]$Y$}] {}; 
+
+% \node[textnode, right of = Y, xshift=10em] {$\mathsf{H}(z_i): = h_i \sample D$};
+% \end{tikzpicture}
+% \end{center}
+
+% \item $\text{Hybrid}_1$: $\SimS$ simulates without the knowledge of $Y$, 
+%     and changes the simulation in the final input.  
+% \begin{itemize}
+%     \item $\SimS$ outputs $(s_1, \dots, s_n)$ where $s_i \sample D$.       
+% \end{itemize}
+% We argue that the view in hybrid 0 and hybrid 1 are computationally indistinguishable. 
+% More precisely, a PPT adversary $\mathcal{A}$ \red{(with knowledge of $X$ and $Y$)} 
+% against commutative weak PRF (with secret key $k$) is given $n$ tuples $(h_i, s_i)$ where $h_i \sample D$, 
+% and is asked to distinguish if $s_i = F_k(h_i)$ or $s_i$ are random values. 
+% $\mathcal{A}$ implicitly sets $\mathcal{R}$'s randomness $k_2:=k$. 
+% \begin{itemize}
+%     \item RO queries: for random oracle query $\langle z \rangle$ where $z \notin Y$,  
+%         picks $h \sample D$ and set $\mathsf{H}(z):=h$; for random oracle query $\langle y_i \rangle$ where $y_i \in Y$, 
+%         sets $\mathsf{H}(y_i):=h_i$.  
+
+%     \item $\mathcal{A}$ outputs $(s_1, \dots, s_n)$.      
+% \end{itemize}
+
+% If $s_i = F_k(h_i)$ for $i \in [n]$, then $\mathcal{A}$'s simulation is identical to hybrid 0. 
+% If $s_i$ are random values, then $\mathcal{A}$'s simulation is identical to hybrid 1. 
+% \end{trivlist}
+
+% \begin{trivlist}
+% \item \underline{Corrupt receiver:} $\SimR$ simulates the view of corrupt $\mathcal{R}$, 
+%     which consists of $\mathcal{R}$'s randomness, input, output and received messages.
+ 
+%     We argue the output of $\SimR$ is indistinguishable from the real execution. 
+%     For this, we formally show the simulation by proceeding the sequence of hybrid transcripts, 
+%     where $T_0$ is the real view of $\mathcal{R}$, and $T_2$ is the output of $\SimR$. 
+
+% \item $\text{Hybrid}_0$: $\SimR$ simulates with the knowledge of $X$. 
+% \begin{itemize}
+%     \item $\SimR$ chooses the randomness for $\mathcal{S}$, i.e., picks $k_1 \sample K$.
+    
+%     \item RO queries: for random oracle query $\langle z \rangle$, picks $h \sample D$ and sets $\mathsf{H}(z):=h$. 
+
+%     \item $\SimR$ computes and outputs 
+%         $\{F_{k_1}(\mathsf{H}(x_i))\}_{x_i \in X}$, 
+%         computes $\{F_{k_1}(F_{k_2}(\mathsf{H}(y_i))\}_{y_i \in Y}$, outputs its permutation $\Gamma$.      
+% \end{itemize}
+% Clearly, $\SimR$'s simulation is identical to the real view. 
+
+% \begin{center}
+% \begin{tikzpicture}
+% \node[textnode, name = intersection] {$X \cap Y$}; 
+% \node[ellipsenode, name = X, left of =intersection, xshift=-1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=-1em]$X$}] {};
+% \node[ellipsenode, name = Y, left of =intersection, xshift=1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=1em]$Y$}] {}; 
+
+% \node[textnode, right of = Y, xshift=10em] {$\mathsf{H}(z_i): = h_i \sample D$};
+% \end{tikzpicture}
+% \end{center}
+
+% \item $\text{Hybrid}_1$: $\SimR$ simulates without the knowledge of $X \cap Y$, 
+%     but with the knowledge of $X - X \cap Y$.   
+% \begin{itemize}
+%     \item $\SimR$ picks $s_j \sample D$ for $j \in [n-m]$ (associated with PRF values for elements in $X - X \cap Y$), 
+%         picks $s_k \sample D$ for $k \in [m]$ (implicitly associated with PRF values for elements in $X \cap Y$, 
+%         though the exact elememts are unknown), 
+%         outputs $(\{s_j\}_{j \in [n-m]}, \{s_k\}_{k \in m})$ according to the order of the final selection vector; 
+%         picks $s_\ell \sample D$ for $\ell \in [n-m]$ (associated with PRF values for elements in  $Y - X \cap Y$),  
+%         outputs the permutation of $(\{F_{k_2}(s_k)\}_{k \in [m]}, \{F_{k_2}(s_\ell)\}_{\ell \in [n-m]})$.                
+% \end{itemize}
+
+% We argue that the view in hybrid 1 and hybrid 2 are computationally indistinguishable. 
+% More precisely, a PPT adversary $\mathcal{A}$ \red{(with knowledge of $X$ and $Y$)} against commutative weak PRFs 
+% are given $n+m$ tuples $(h_i, s_i)$ where $h_i \sample D$, and is asked to determine if $s_i = F_{k}(h_i)$ or random values. 
+% $\mathcal{A}$ implicitly sets $\mathcal{S}$'s randomness $k_1:=k$, picks $k_2 \sample K$. 
+% \begin{itemize}
+%     \item RO queries: for $z \notin X \cup Y$, picks $h \sample D$ and returns $\mathsf{H}(z):=h$; 
+%         for $z_i \in X \cup Y$, returns $\mathsf{H}(z_i) = h_i$. 
+
+%     \item $\mathcal{A}$ prepares $s_j$ for $z_i \in X - X \cap Y$, 
+%         $s_k$ for $z_k \in X \cap Y$, 
+%         outputs $(\{s_j\}_{j \in [n-m]}, \{s_k\}_{k \in m})$ according to the order of the final selection vector; 
+%         prepares $s_\ell \sample D$ for $z_\ell \in Y - X \cap Y$,  
+%         outputs the permutation of $(\{F_{k_2}(s_k)\}_{k \in [m]}, \{F_{k_2}(s_\ell)\}_{\ell \in [n-m]})$.               
+% \end{itemize}
+
+% If $s_i$ are function values, then the simulation is identical to hybrid 0, 
+% else it is identical to hybrid 1. 
+% \end{trivlist}
+% \end{proof}
+
+
+% \section{Instantiation Based on the DDH Assumption}\label{sec:protocols}
+% We construct a linear complexity PSU protocol from the DDH assumption in Figure~\ref{fig:DH-PSU}.  
+% \begin{figure}[!hbtp]
+% \begin{framed}
+% \begin{minipage}[center]{\textwidth}
+% \begin{trivlist}
+% \item \textbf{Parameters:} 
+% \begin{itemize}
+%     \item Common input: $\mathbb{G} = \langle g \rangle$, hash function $\mathsf{H}: \{0,1\}^* \rightarrow \mathbb{G}$. 
+
+%     \item Input of sender $\mathcal{S}$: $X = \{x_1, \dots, x_n\}$.
+
+%     \item Input of receiver $\mathcal{R}$: $Y = \{y_1, \dots, y_n\}$. 
+% \end{itemize}
+
+% \item \textbf{Protocol:}
+
+% \begin{enumerate}
+% \item $\mathcal{R}$ picks $b \sample \mathbb{Z}_p$, then sends $(\mathsf{H}(y_1)^b, \dots, \mathsf{H}(y_n)^b)$ to $\mathcal{S}$. 
+
+% \item $\mathcal{S}$ picks $a \sample \mathbb{Z}_p$, 
+%     sends $(\mathsf{H}(x_1)^a, \dots, \mathsf{H}(x_n)^a)$ to $\mathcal{R}$; 
+%     he also computes $(\mathsf{H}(y_1)^b)^a, \dots, \mathsf{H}(y_n)^b)^a)$ and sends its permutation $\Gamma$ to $\mathcal{R}$. 
+
+
+% \item $\mathcal{R}$ computes $(\mathsf{H}(x_1)^a)^b, \dots, \mathsf{H}(x_n)^a)^b)$, 
+%     then sets $v_i = 0$ iff the value is not in $\Gamma$. 
+
+% \item $\mathcal{R}$ with select vector $(v_1, \dots, v_n)$ and $\mathcal{S}$ with input $\{(x_i, \bot)\}_{i \in [n]}$ 
+%     engage in one-sided OT. 
+
+% \item $\mathcal{R}$ obtains $X - X \cap Y$, and thus obtains the union $X \cup Y$.  
+% \end{enumerate}
+% \end{trivlist}
+% \end{minipage}
+% \end{framed}
+% \caption{DH-PSU}\label{fig:DH-PSU}
+% \end{figure}
+
+% \begin{theorem}
+% The above PSU protocol is secure in the semi-honest model assuming $\mathsf{H}$ is a random oracle and the DDH assumption.
+% \end{theorem}
+
+% \begin{proof}
+% We exhibit simulators $\SimR$ and $\SimS$ for simulating corrupt $\mathcal{R}$ and $\mathcal{S}$ respectively, 
+% and argue the indistinguishability of the produced transcript from the real execution. Let $|X \cap Y| = m$. 
+
+
+% \begin{trivlist}
+% \item \underline{Corrupt sender:} $\SimS$ simulates the view of corrupt $\mathcal{S}$, 
+%     which consists of $\mathcal{S}$'s randomness, input, output and received messages.
+
+%     Intuitively, the crux of the security proof is to simulate sender's view without the knowledge of $Y$, 
+%     more precisely, the knowledge of $X \cap Y$. 
+%     Looking ahead, we will use RO to program the hash outputs for elements in $Y - X \cap Y$ naively, 
+%     and program the hash outputs for elements in $X$ in a special way to ensure the associated messages sent from $\mathcal{R}$ 
+%     are pseudorandom. 
+ 
+%     We argue the output of $\SimS$ is indistinguishable from the real execution. 
+%     For this, we formally show the simulation by proceeding the sequence of hybrid transcripts, 
+%     where $T_0$ is the real view of $\mathcal{S}$, and $T_2$ is the output of $\SimS$. 
+
+% \item $\text{Hybrid}_0$: $\SimS$ simulates with the knowledge of $Y$. 
+% \begin{itemize}
+%     \item $\SimS$ chooses the randomness for $\mathcal{R}$, i.e., picks $b \sample \mathbb{Z}_p$.
+    
+%     \item RO queries: picks $h_i \sample \mathbb{G}$ and sets $\mathsf{H}(z_i):=h_i$. 
+
+%     \item $\SimS$ outputs $h_i^b$ for $y_i \in Y$.     
+% \end{itemize}
+% Clearly, $\SimS$'s simulation is identical to the real view. 
+
+% \begin{center}
+% \begin{tikzpicture}
+% \node[textnode, name = intersection] {$X \cap Y$}; 
+% \node[ellipsenode, name = X, left of =intersection, xshift=-1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=-1em]$X$}] {};
+% \node[ellipsenode, name = Y, left of =intersection, xshift=1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=1em]$Y$}] {}; 
+
+% \node[textnode, right of = Y, xshift=10em] {$\mathsf{H}(z_i): = h_i \sample \mathbb{G}$};
+% \end{tikzpicture}
+% \end{center}
+
+% \item $\text{Hybrid}_1$: $\SimS$ still simulates with the knowledge of $Y$, 
+%     but slightly change the simulation of random oracle 
+% \begin{itemize}
+%     \item RO queries: picks $d_i, e_i \sample \mathbb{Z}_p$, sets $\mathsf{H}(z_i):= h_i = h^{d_i} \cdot g^{e_i}$. 
+%         Here, $h$ is a fixed random group element.  
+
+%     \item $\SimS$ outputs $h_i^b$ for $y_i \in Y$.            
+% \end{itemize}
+% The modification in RO simulation does not alter the view. 
+
+% \begin{center}
+% \begin{tikzpicture}
+% \node[textnode, name = intersection] {$X \cap Y$}; 
+% \node[ellipsenode, name = X, left of =intersection, xshift=-1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=-1em]$X$}] {};
+% \node[ellipsenode, name = Y, left of =intersection, xshift=1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=1em]$Y$}] {}; 
+
+% \node[textnode, right of = Y, xshift=10em] {$\mathsf{H}(z_i) := h_i = h^{d_i} \cdot g^{d_i}$}; 
+% \end{tikzpicture}
+% \end{center}
+
+% \item $\text{Hybrid}_2$: $\SimS$ simulates without the knowledge of $Y$, 
+%     and changes the simulation in the final input.  
+% \begin{itemize}
+%     \item $\SimS$ outputs random $f_i$ for $i \in [n]$.       
+% \end{itemize}
+% We argue that the view in hybrid 2 and hybrid 3 are computationally indistinguishable. 
+% More precisely, given $(g, g^\alpha, g^\beta, g^\gamma)$, 
+% a PPT adversary $\mathcal{A}$ \red{(with knowledge of $X$ and $Y$)} implicitly sets $\mathcal{R}$'s randomness $b:=\alpha$. 
+% \begin{itemize}
+%     \item RO queries: sets $h := g^\beta$; picks $d_i, e_i \sample \mathbb{Z}_p$, sets $\mathsf{H}(z_i):=h^{d_i} \cdot g^{e_i}$. 
+
+%     \item $\mathcal{A}$ outputs $g^{\gamma d_i + \alpha e_i}$ for $i \in [n]$.      
+% \end{itemize}
+
+% If $(g, g^\alpha, g^\beta, g^\gamma)$ is a DDH tuple, then the simulation is identical to hybrid 1, 
+% else it is identical to hybrid 2. 
+% \end{trivlist}
+
+% \begin{trivlist}
+% \item \underline{Corrupt receiver:} $\SimR$ simulates the view of corrupt $\mathcal{R}$, 
+%     which consists of $\mathcal{R}$'s randomness, input, output and received messages.
+ 
+%     We argue the output of $\SimR$ is indistinguishable from the real execution. 
+%     For this, we formally show the simulation by proceeding the sequence of hybrid transcripts, 
+%     where $T_0$ is the real view of $\mathcal{R}$, and $T_2$ is the output of $\SimR$. 
+
+% \item $\text{Hybrid}_0$: $\SimR$ simulates with the knowledge of $X$. 
+% \begin{itemize}
+%     \item $\SimR$ chooses the randomness for $\mathcal{S}$, i.e., picks $a \sample \mathbb{Z}_p$.
+    
+%     \item RO queries: picks $h_i \sample \mathbb{G}$ and sets $\mathsf{H}(z_i):=h_i$. 
+
+%     \item $\SimR$ computes and outputs $\{h_i^{a}\}_{x_i \in X}$; 
+%         computes $\{(h_i^{b})^a\}_{y_i \in Y}$, outputs its permutation.      
+% \end{itemize}
+% Clearly, $\SimR$'s simulation is identical to the real view. 
+
+% \begin{center}
+% \begin{tikzpicture}
+% \node[textnode, name = intersection] {$X \cap Y$}; 
+% \node[ellipsenode, name = X, left of =intersection, xshift=-1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=-1em]$X$}] {};
+% \node[ellipsenode, name = Y, left of =intersection, xshift=1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=1em]$Y$}] {}; 
+
+% \node[textnode, right of = Y, xshift=10em] {$\mathsf{H}(z_i): = h_i \sample \mathbb{G}$};
+% \end{tikzpicture}
+% \end{center}
+
+% \item $\text{Hybrid}_1$: $\SimR$ still simulates with the knowledge of $X$, 
+%     but slightly changes the simulation of random oracle 
+% \begin{itemize}
+%     \item RO queries: for $z_i \notin Y$, picks $r_i \sample \mathbb{Z}_p$ and sets $\mathsf{H}(z_i):= h_i = g^{r_i}$; 
+%         for $z_i \in Y$, 
+%         picks $d_i, e_i \sample \mathbb{Z}_p$, sets $\mathsf{H}(z_i):= h_i = h^{d_i} \cdot g^{e_i}$. 
+%         Here, $h$ is a fixed random group element.  
+
+%     \item $\SimR$ computes and outputs $\{h_i^{a}\}_{x_i \in X}$; 
+%         computes $\{(h_i^{b})^a\}_{y_i \in Y}$, outputs its permutation.               
+% \end{itemize}
+% The modification in RO simulation does not alter the view. 
+
+% \begin{center}
+% \begin{tikzpicture}
+% \node[textnode, name = intersection] {$X \cap Y$}; 
+% \node[ellipsenode, name = X, left of =intersection, xshift=-1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=-1em]$X$}] {};
+% \node[ellipsenode, name = Y, left of =intersection, xshift=1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=1em]$Y$}] {}; 
+
+% \node[textnode, right of = Y, xshift=14em] {\(\displaystyle
+% \mathsf{H}(z_i) = \left\{ \begin{array}{cl}
+% g^{r_i} & \text{if } z_i \notin Y\\
+% h^{d_i} \cdot g^{e_i}  & \text{if } z_i \in Y\\ 
+% \end{array} \right. \)};  
+% \end{tikzpicture}
+% \end{center}
+
+% \item $\text{Hybrid}_2$: $\SimR$ simulates without the knowledge of $X$, 
+%     and changes the simulation in the final input.  
+% \begin{itemize}
+%     \item $\SimR$ computes $f_j = h_j^{a}$ for $x_j \in X - X \cap Y$ (note that the information of such $x_j$ 
+%         can be inferred from $\mathcal{R}$'s output), picks random $f_k$ for $k \in [m]$ 
+%         (implicitly assigned for elements in $X \cap Y$), outputs $(f_1, \dots, f_n)$; 
+%         then picks random $f_\ell$ for $\ell \in [n-m]$ (implicitly assigned to elements in $Y - X \cap Y$), 
+%         outputs the permutation of $(\{f_k^b\}_{k \in [m]}, \{f_\ell^b\}_{\ell \in [n-m]})$.        
+% \end{itemize}
+% We argue that the view in hybrid 1 and hybrid 2 are computationally indistinguishable. 
+% More precisely, given $(g, g^\alpha, g^\beta, g^\gamma)$, 
+% a PPT adversary $\mathcal{A}$ \red{(with knowledge of $X$ and $Y$)} 
+% implicitly sets $\mathcal{S}$'s randomness $a:=\alpha$, picks $b \sample \mathbb{Z}_p$. 
+% \begin{itemize}
+%     \item RO queries: sets $h := g^\beta$; 
+%         for $z_i \notin Y$, picks $r_i \sample \mathbb{Z}_p$ and sets $\mathsf{H}(z_i):= h_i = g^{r_i}$; 
+%         for $z_i \in Y$, 
+%         picks $d_i, e_i \sample \mathbb{Z}_p$, sets $\mathsf{H}(z_i):= h_i = h^{d_i} \cdot g^{e_i}$.  
+
+%     \item $\mathcal{A}$ computes $f_j = (g^\alpha)^{r_i}$ for $x_j \in X - X \cap Y$, 
+%         computes $f_k = g^{\gamma d_k + e_k}$ for $k \in [m]$, outputs $(f_1, \dots, f_n)$; 
+%         then prepares $f_\ell = g^{\gamma d_\ell + e_\ell}$ for $\ell \in [n-m]$, 
+%         outputs the permutation of $(\{f_k^b\}_{k \in [m]}, \{f_\ell^b\}_{\ell \in [n-m]})$.          
+% \end{itemize}
+
+% If $(g, g^\alpha, g^\beta, g^\gamma)$ is a DDH tuple, then the simulation is identical to hybrid 1, 
+% else it is identical to hybrid 2. 
+% \end{trivlist}
+% \end{proof}
+
+% \section{Diffie-Hellman Based PSI}
+% We recall the ideal PSI functionality in Figure~\ref{fig:fpsi}. 
+% \begin{figure}[!hbtp]
+% \begin{framed}
+% \begin{minipage}[center]{\textwidth}
+% \begin{trivlist}
+% \item \textbf{Parameters:} 
+% \begin{itemize}
+% \item Sender $\mathcal{S}$, Receiver $\mathcal{R}$
+% \item Set sizes $n_\mathsf{x}$ and $n_\mathsf{y}$
+% \end{itemize}
+
+% \item \textbf{Functionality:}
+% \begin{itemize}
+% \item Wait for input $X=\{x_1,\dots,x_{n_\mathsf{x}}\}\subset \{0,1\}^*$ from the receiver $\mathcal{S}$.
+% \item Wait for input $Y=\{y_1,\dots,y_{n_\mathsf{y}}\}\subset \{0,1\}^*$ from the sender $\mathcal{R}$.
+% \item Give output $X \cap Y$ to the receiver $\mathcal{R}$.
+% \end{itemize}
+% \end{trivlist}
+% \end{minipage}
+% \end{framed}
+% \caption{Private Set Intersection Functionality $\FuncPSI$}\label{fig:fpsi}
+% \end{figure}
+
+% We first recall the DH-PSI in Figure~\ref{fig:DH-PSI}. 
+
+% \begin{figure}[!hbtp]
+% \begin{framed}
+% \begin{minipage}[center]{\textwidth}
+% \begin{trivlist}
+% \item \textbf{Parameters:} 
+% \begin{itemize}
+%     \item Common input: $\mathbb{G} = \langle g \rangle$ with prime order $p$, 
+%         hash function $\mathsf{H}: \{0,1\}^* \rightarrow \mathbb{G}$. 
+
+%     \item Input of sender $\mathcal{S}$: $X = \{x_1, \dots, x_n\}$.
+
+%     \item Input of receiver $\mathcal{R}$: $Y = \{y_1, \dots, y_n\}$. 
+% \end{itemize}
+
+% \item \textbf{Protocol:}
+% \begin{enumerate}
+% \item $\mathcal{S}$ picks $a \sample \mathbb{Z}_p$, 
+%     then sends random permutation of $(\mathsf{H}(x_1)^a, \dots, \mathsf{H}(x_n)^a)$ to $\mathcal{R}$. 
+% \item $\mathcal{R}$ picks $b \sample \mathbb{Z}_p$, then sends $(\mathsf{H}(y_1)^b, \dots, \mathsf{H}(y_n)^b)$ to $\mathcal{S}$.
+% \item $\mathcal{S}$ sends $(\mathsf{H}(y_1)^{ab}, \dots, \mathsf{H}(y_n)^{ab})$ to $\mathcal{R}$. 
+% \item $\mathcal{R}$ sets $\Omega = \{\mathsf{H}(x_i)^{ab}\}_{i \in n}$, 
+%     and outputs $\{y \mid \mathsf{H}(y)^{ab} \in \Omega\}$.
+% \end{enumerate}
+% \end{trivlist}
+% \end{minipage}
+% \end{framed}
+% \caption{DH-PSI}\label{fig:DH-PSI}
+% \end{figure}
+
+% \begin{theorem}
+% The above PSI protocol is secure in the semi-honest model assuming $\mathsf{H}$ is a random oracle and the DDH assumption.
+% \end{theorem}
+
+% \begin{proof}
+% We exhibit simulators $\SimR$ and $\SimS$ for simulating corrupt $\mathcal{R}$ and $\mathcal{S}$ respectively, 
+% and argue the indistinguishability of the produced transcript from the real execution. Let $|X \cap Y| = m$. 
+
+% \begin{trivlist}
+% \item \underline{Corrupt sender:} $\SimS$ simulates the view of corrupt $\mathcal{S}$, 
+% which consists of $\mathcal{S}$'s randomness, input, output and received messages.
+% $\SimS$ proceeds as follows. 
+
+% We now argue the output of $\SimS$ is indistinguishable from the real execution. 
+% For this, we formally show the simulation by proceeding the sequence of hybrid transcripts, 
+% where $T_0$ is the real view of $\mathcal{S}$, and $T_2$ is the output of $\SimS$. 
+
+% \item $\text{Hybrid}_0$: $\SimS$ simulates with the knowledge of $Y$. 
+% \begin{itemize}
+%     \item $\SimS$ chooses the randomness for $\mathcal{R}$, i.e., picks $b \sample \mathbb{Z}_p$
+    
+%     \item RO queries: picks $h_i \sample \mathbb{G}$ and sets $\mathsf{H}(z_i):=h_i$. 
+
+%     \item $\SimS$ outputs $h_i^b$ for $y_i \in Y$ (message in step 2).     
+% \end{itemize}
+% Clearly, $\SimS$'s simulation is identical to the real view. 
+
+% \begin{center}
+% \begin{tikzpicture}
+% \node[textnode, name = intersection] {$X \cap Y$}; 
+% \node[ellipsenode, name = X, left of =intersection, xshift=-1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=-1em]$X$}] {};
+% \node[ellipsenode, name = Y, left of =intersection, xshift=1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=1em]$Y$}] {}; 
+
+% \node[textnode, right of = Y, xshift=10em] {$\mathsf{H}(z_i): = h_i \sample \mathbb{G}$};
+% \end{tikzpicture}
+% \end{center}
+
+% \item $\text{Hybrid}_1$: $\SimS$ still simulates with the knowledge of $Y$, 
+%     but slightly change the simulation of random oracle 
+% \begin{itemize}
+%     \item RO queries: picks $d_i, e_i \sample \mathbb{Z}_p$, 
+%         sets $\mathsf{H}(z_i):= h_i = h^{d_i} \cdot g^{e_i}$. 
+%         Here, $h$ is a random group element fixed at beginning.  
+
+%     \item $\SimS$ outputs $h_i^b$ for $y_i \in Y$.            
+% \end{itemize}
+% The modification in RO simulation does not alter the view. 
+
+% \begin{center}
+% \begin{tikzpicture}
+% \node[textnode, name = intersection] {$X \cap Y$}; 
+% \node[ellipsenode, name = X, left of =intersection, xshift=-1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=-1em]$X$}] {};
+% \node[ellipsenode, name = Y, left of =intersection, xshift=1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=1em]$Y$}] {}; 
+
+% \node[textnode, right of = Y, xshift=10em] {$\mathsf{H}(z_i) := h_i = h^{d_i} \cdot g^{e_i}$}; 
+% \end{tikzpicture}
+% \end{center}
+
+% \item $\text{Hybrid}_2$: $\SimS$ simulates without the knowledge of $Y$, 
+%     and changes the simulation in the final input.  
+% \begin{itemize}
+%     \item $\SimS$ outputs random $f_i$ for $i \in [n]$.       
+% \end{itemize}
+% We argue that the view in hybrid 2 and hybrid 3 are computationally indistinguishable based on the DDH assumption. 
+% More precisely, given $(g, g^\alpha, g^\beta, g^\gamma)$, 
+% a PPT adversary $\mathcal{A}$ \red{(with knowledge of $X$ and $Y$)} implicitly sets $\mathcal{R}$'s random tape $b:=\alpha$: 
+% \begin{itemize}
+%     \item RO queries: sets $h = g^\beta$; picks $d_i, e_i \sample \mathbb{Z}_p$, 
+%         sets $\mathsf{H}(z_i):=h_i = h^{d_i} \cdot g^{e_i}$. 
+
+%     \item $\mathcal{A}$ outputs $g^{\gamma d_i + \alpha e_i}$ for $i \in [n]$.      
+% \end{itemize}
+
+% If $(g, g^\alpha, g^\beta, g^\gamma)$ is a DDH tuple, 
+% then the simulation is identical to hybrid 1 because $g^{\gamma d_i + \alpha e_i} = g^{\alpha \beta d_i + \alpha e_i} = h_i^b$, 
+% else it is identical to hybrid 2. 
+% \end{trivlist}
+
+% \begin{remark}
+% From hybrid 1, we program $\mathsf{H}(z_i) = h^{d_i} \cdot g^{e_i}$ 
+% to obtain a tight reduction by leveraging the random self-reducible property of the DDH assumption. 
+% Alternatively, we can simply program $\mathsf{H}(z_i) = h^{d_i}$, then argue the indistinguishability using hybrid argument. 
+% As a result, the security reduction comes with a loose factor $n$.    
+% \end{remark}
+
+% \begin{trivlist}
+% \item \underline{Corrupt receiver:} $\SimR$ simulates the view of corrupt $\mathcal{R}$, 
+% which consists of $\mathcal{R}$'s randomness, input, output and received messages. $\SimR$ proceeds as follows. 
+
+% We now argue the output of $\SimR$ is indistinguishable from the real execution. 
+% For this, we formally show the simulation by proceeding the sequence of hybrid transcripts, 
+% where $T_0$ is the real view of $\mathcal{R}$, and $T_2$ is the output of $\SimR$. 
+
+% The simulator has to emulate two messages: 
+% \begin{itemize}
+%     \item message in step 1: a permutation of $(\mathsf{H}(x_1)^a, \dots, \mathsf{H}(x_n)^a)$
+%     \item message in step 3: $(\mathsf{H}(y_1)^{ab}, \dots, \mathsf{H}(y_n)^{ab})$
+% \end{itemize}
+% Since the elements in $X - X \cap Y$ are unknown, 
+
+
+% \item $\text{Hybrid}_0$: $\SimR$ simulates with the knowledge of $X$. 
+% \begin{itemize}
+%     \item $\SimR$ chooses the randomness for $\mathcal{S}$, i.e., picks $a \sample \mathbb{Z}_p$
+    
+%     \item RO queries: picks $h_i \sample \mathbb{G}$ and sets $\mathsf{H}(z_i):=h_i$. 
+
+%     \item $\SimR$ outputs a random permutation of $(\mathsf{H}(x_1)^a, \dots, \mathsf{H}(x_n)^a)$ and 
+%         $(\mathsf{H}(y_1)^{ab}, \dots, \mathsf{H}(y_n)^{ab})$.     
+% \end{itemize}
+% Clearly, $\SimR$'s simulation is identical to the real view. 
+
+% \begin{center}
+% \begin{tikzpicture}
+% \node[textnode, name = intersection] {$X \cap Y$}; 
+% \node[ellipsenode, name = X, left of =intersection, xshift=-1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=-1em]$X$}] {};
+% \node[ellipsenode, name = Y, left of =intersection, xshift=1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=1em]$Y$}] {}; 
+
+% \node[textnode, right of = Y, xshift=10em] {$\mathsf{H}(z_i): = h_i \sample \mathbb{G}$};
+% \end{tikzpicture}
+% \end{center}
+
+% \item $\text{Hybrid}_1$: $\SimR$ still simulates with the knowledge of $X$, 
+%     but slightly change the simulation of random oracle 
+% \begin{itemize}
+%     \item RO queries: for $z_i \in Y$, picks $r_i \sample \mathbb{Z}_p$ 
+%         and sets $\mathsf{H}(z_i):= h_i = g^{r_i}$; for $z_i \notin Y$, 
+%         picks $d_i, e_i \sample \mathbb{Z}_p$, sets $\mathsf{H}(z_i):= h_i = h^{d_i} \cdot g^{e_i}$. 
+%         Here, $h$ is a random group element fixed at beginning.              
+% \end{itemize}
+% The modification in RO simulation does not alter the view. 
+
+% \begin{center}
+% \begin{tikzpicture}
+% \node[textnode, name = intersection] {$X \cap Y$}; 
+% \node[ellipsenode, name = X, left of =intersection, xshift=-1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=-1em]$X$}] {};
+% \node[ellipsenode, name = Y, left of =intersection, xshift=1.5em, 
+%     minimum height = 3em, minimum width=6em, label={[xshift=1em]$Y$}] {}; 
+
+% \node[textnode, right of = Y, xshift=14em] {\(\displaystyle
+% \mathsf{H}(z_i) = \left\{ \begin{array}{cl}
+% g^{r_i} & \text{if } z_i \in Y\\
+% h^{d_i} \cdot g^{e_i}  & \text{if } z_i \notin Y\\ 
+% \end{array} \right. \)}; 
+% \end{tikzpicture}
+% \end{center}
+
+% \item $\text{Hybrid}_2$: $\SimR$ simulates without the knowledge of $X$, 
+%     and changes the simulation in the output.  
+% \begin{itemize}
+%     \item $\SimR$ picks random $f_j$ for $j \in [n-m]$ (associated with elements in $X - X \cap Y$), 
+%         prepares $f_k = h_k^a$ for $k \in [m]$ (associated with elements in $X \cap Y$), 
+%         then outputs a random permutation of $\{f_i\}_{i \in [n]}$, 
+%         and $(\mathsf{H}(y_1)^{ab}, \dots, \mathsf{H}(y_n)^{ab})$.       
+% \end{itemize}
+% We argue that the view in hybrid 2 and hybrid 3 are computationally indistinguishable based on the DDH assumption. 
+% More precisely, given $(g, g^\alpha, g^\beta, g^\gamma)$, 
+% a PPT adversary $\mathcal{A}$ \red{(with knowledge of $X$ and $Y$)} 
+% implicitly sets $\mathcal{S}$'s randomness $a:=\alpha$, picks $\mathcal{R}$'s randomness $b \sample \mathbb{Z}_p$: 
+% \begin{itemize}
+%     \item RO queries: sets $h = g^\beta$; for $z_i \in Y$, picks $r_i \sample \mathbb{Z}_p$ 
+%         and sets $\mathsf{H}(z_i):= h_i = g^{r_i}$; for $z_i \notin Y$, 
+%         picks $d_i, e_i \sample \mathbb{Z}_p$, sets $\mathsf{H}(z_i):= h_i = h^{d_i} \cdot g^{e_i}$.  
+
+%     \item $\mathcal{A}$ computes $f_j = g^{\gamma d_j + \alpha e_j}$ for $j \in [n-m]$, 
+%         $f_k = (g^\alpha)^{r_k}$ for $k \in [m]$, 
+%         then outputs a random permutation of $\{f_i\}_{i \in n}$ 
+%         and $\{\mathsf{H}(y_1)^{ab}, \dots, \mathsf{H}(y_n)^{ab}\}$, where $\mathsf{H}(y_i)^{ab} = (g^\alpha)^{r_ib}$.      
+% \end{itemize}
+
+% If $(g, g^\alpha, g^\beta, g^\gamma)$ is a DDH tuple, 
+% then the simulation is identical to hybrid 1 because $g^{\gamma d_j + \alpha e_j} = g^{\alpha \beta d_i + \alpha e_i} = h_j^a$, 
+% else it is identical to hybrid 2. 
+% \end{trivlist}
+% \end{proof}
