@@ -1002,6 +1002,42 @@ The resulting PSU protocol is semi-honest secure by assuming the semi-honest sec
 \blue{How to formally prove this theorem? Shall we interpret client's 
 private input in mqRPMT as a set $X$ or as a vector?}
 
+\cyan{The input of client is absolutely a set $X$ instead of a vector, that is, there is no order in elements of $X$. In other word, the same elements with different order form the same set.  However, one may ask, when we actually excute a protocol, we must use elements in $X$ under some order, how to understand this order? My answer is that, this order just reflects the order in which the protocol is executed, and has no relation with the set itself. In other word, if we execute the protocol with the same set $X$, but under different order, there is no influence in protocol's correctness and security. For example, in PSU, the receiver obtain $x$ in $i$th OT, we should not regard this $i$ leak the information about $X$, because $X$ has no order, in the next execution, this $x$ may be appears in $j$th OT. Both execution is a secure execution of PSU. If one still think the original order of $X$ will leak some information (e.g. in real world, the order may has some deviation), we can just assume all parties select a random permutation to shuffle their input set before they execute any PSO protocols.}
+
+\begin{proof}
+\begin{trivlist}
+\item \underline{Corrupt Sender:} $\mathsf{Sim}_2(X=\{x_1,\dots,x_{n_2}\})$ 
+    simulates the view of corrupt semi-honest sender. It executes as follows:
+\begin{enumerate}
+\item $\mathsf{Sim}_2$ invokes mq-RPMT simulator $\mathsf{Sim}_\mathsf{mq\text{-}rpmt}^S(X)$ 
+    and appends the output to the view.
+
+\item For $i\in [n_2]$, $\mathsf{Sim}_{2}$ invokes OT simulator $\mathsf{Sim}_\mathsf{ot}^S(x_i,\perp)$ 
+    and appends the output to the view.
+\end{enumerate}
+Now we argue that the view output by $\mathsf{Sim}_{2}$ is indistinguishable from the real one. 
+This is obtained by the underlying simulators' indistinguishability directly.
+
+\item \underline{Corrupt Receiver:} $\mathsf{Sim}_1(Y=\{y_1,\dots,y_{n_{1}}\}, X \cup Y)$ 
+    simulates the view of corrupt semi-honest receiver. It executes as follows:
+\begin{enumerate}
+\item $\mathsf{Sim}_1$ defines the set $Z := Y\cup X\setminus Y$, 
+    i.e. the set of elements that $X$ ``brings to the union''. 
+    Next, it uses $\perp$ to pads $Z$ to $n_{2}$ elements and permutates these elements randomly. 
+    Let $Z=\{z_1,\dots,z_{n_2}\}$. 
+
+\item $\mathsf{Sim}_1$ sets $e_i = 1$ if and only if $z_i\in Y$ for $i\in [n_2]$. 
+    Then, it invokes mq-RPMT simulator $\mathsf{Sim}_\mathsf{mq\text{-}rpmt}^R(Y,e)$ and appends the output to the view.
+
+\item For $i\in [n_2]$, $\mathsf{Sim}_1$ invokes OT simulator 
+    $\mathsf{Sim}_\mathsf{ot}^R(e_i,z_i)$ and appends the output to the view.
+\end{enumerate}
+\end{trivlist}
+Now we argue that the view output by $\mathsf{Sim}_{1}$ is indistinguishable from the real one. In the simulation, the way $P_1$ obtains the elements in $Z= X\setminus Y$ is identical to the real execution.\footnote{In fact, the order that $P_1$ obtains $x_i$ is different from real execution. However, this makes no influence in the security of protocol since there is no order in set $X$, the index $i$ just reflects the order of this execution.} By the underlying simulators' indistinguishability, the simulated view is computationally indistinguishable from the real one. 
+
+\end{proof}
+
+
 \section{Implementation}
 \begin{table}[H]
 \begin{center}
