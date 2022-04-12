@@ -948,6 +948,7 @@ This proves the theorem.
 
 
 \section{Applications of Multi-Query RPMT}
+We show how to build a PSO framework central around mqRPMT in Figure~\ref{fig:PSO-from-mqRPMT}.
 \begin{figure}[!hbtp]
 \begin{framed}
 \begin{minipage}[center]{\textwidth}
@@ -994,9 +995,12 @@ This proves the theorem.
 \caption{PSO from mqRPMT}\label{fig:PSO-from-mqRPMT}
 \end{figure} 
 
+\begin{theorem}
+The resulting PSU protocol is semi-honest secure by assuming the semi-honest security of mqRPMT and OT.
+\end{theorem}
 
-
-
+\blue{How to formally prove this theorem? Shall we interpret client's 
+private input in mqRPMT as a set $X$ or as a vector?}
 
 \section{Implementation}
 \begin{table}[H]
